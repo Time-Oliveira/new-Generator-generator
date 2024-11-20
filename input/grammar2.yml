@@ -1,0 +1,180 @@
+syntax:
+  - rule: L -> E
+    actions:
+      - L.dif := generator_difficult
+      - E.dif := L.dif
+  - rule: E -> S F
+    actions:
+      - S.dif := E.dif / 2
+      - F.dif := E.dif / 2
+  - rule: E -> S F W
+    actions:
+      - S.dif := E.dif / 3
+      - F.dif := E.dif / 3
+      - W.dif := E.dif / 3
+  - rule: S -> Select A
+    actions:
+      - A.dif := S.dif
+  - rule: S -> Select *
+  - rule: W -> Where Z
+    actions:
+      - Z.dif := W.dif
+  - rule: F -> From T
+    actions:
+      - T.dif := F.dif
+  - rule: F -> From ( E ) As TableName
+    actions:
+      - E.dif := F.dif
+  - rule: A -> Attribute
+    actions:
+      - Attribute.dif := A.dif
+  - rule: A -> Attribute, A
+    actions:
+       - Attribute.dif := A.dif / 2
+       - A.dif := A.dif - Attribute.dif
+  - rule: O -> Operator
+    actions:
+      - Operator.dif := O.dif
+  - rule: T -> Table
+    actions:
+      - Table.dif := T.dif
+      -
+      - Table.details := rand(Symbol_Table, T.dif)
+
+  - rule: T -> Table Join T
+    actions:
+      - Table.dif := T.dif / 2  # 计算 Table.dif
+      - context['T.dif'] := T.dif - Table.dif  # 使用上下文存储更新后的 T.dif
+      - T.dif := context['T.dif']  # 更新 T.dif
+      - Table.details := rand(Symbol_Table, T.dif)  # 使用更新后的 T.dif
+
+
+  - rule: Z -> Z OR Y
+    actions:
+      - Z.dif := Z.dif / 2
+      - Y.dif := Z.dif / 2
+  - rule: Z -> Y
+    actions:
+      - Y.dif := Z.dif
+  - rule: Y -> S AND C
+    actions:
+      - C.dif := Y.dif / 2
+      - Y.dif := Y.dif / 2
+  - rule: Y -> C
+    actions:
+      - C.dif := Y.dif
+  - rule: C -> ( Z )
+    actions:
+      - Z.dif := Y.dif
+  - rule: C -> NOT C
+    actions:
+      - C.dif := C.dif
+  - rule: C -> P
+    actions:
+      - P.dif := C.dif
+  - rule: P -> A O Value
+    actions:
+      - A.dif := P.dif / 3
+      - O.dif := P.dif / 3
+      - Value.dif := P.dif / 3
+  - rule: P -> A O Attribute
+    actions:
+      - A.dif := P.dif / 3
+      - O.dif := P.dif / 3
+      - Attribute.dif := P.dif / 3
+  - rule: P -> A IN ( E )
+    actions:
+      - A.dif := P.dif / 2
+      - E.dif := P.dif / 2
+  - rule: P -> EXISTS ( E )
+    actions:
+      - E.dif := P.dif
+
+# 定义属性部分
+columns:
+  - name: GPA
+    type: LimitedFloat
+    params: [1, 1.0, 4.0]
+    dif: 2
+
+  - name: Major
+    type: CustomString
+    params: [20]
+    dif: 2
+
+  - name: Location
+    type: CustomString
+    params: [20]
+    dif: 2
+
+  - name: ID
+    type: CustomInt
+    params: [1000, 9999]
+    dif: 2
+
+  - name: Age
+    type: CustomInt
+    params: [18, 25]
+    dif: 2
+
+  - name: Name
+    type: CustomString
+    params: [10]
+    dif: 2
+
+  - name: Unit
+    type: UnitFloat
+    params: [1.0, 2.0, 3.0, 4.0]
+    dif: 2
+
+  - name: Classroom
+    type: CustomString
+    params: [5]
+    dif: 2
+
+# 定义表格部分
+tables:
+  - name: Course
+    columns: [ID, Name, Unit, Classroom]
+    dif: 8
+
+  - name: Student
+    columns: [ID, GPA, Age]
+    dif: 7
+
+  - name: School
+    columns: [Major, Location]
+    dif: 5
+
+constants:
+  - generator_difficult: 16
+functions:
+  rand:
+    params:
+      - name: symbol_table
+        type: symbol_table
+      - name: difficulty
+        type: dynamic
+    implementation: |
+      def rand(symbol_table, difficulty, tolerance=3):
+          import random
+          
+          # 确保 symbol_table 和 difficulty 有效
+          if symbol_table is None:
+            raise ValueError("symbol_table is None")
+          if difficulty is None:
+            raise ValueError("difficulty is None")
+
+          # 过滤时使用 'dif' 字段
+          filtered_symbols = [
+            (name, details) for name, details in symbol_table.symbols.items()
+            if details and 'dif' in details and abs(details['dif'] - difficulty) <= tolerance
+          ]
+
+          print(f"Filtered symbols (difficulty: {difficulty}, tolerance: {tolerance}): {filtered_symbols}")
+
+          if not filtered_symbols:
+              raise ValueError(f"No matching symbol found with the specified difficulty: {difficulty}. Consider adjusting tolerance.")
+
+          selected_symbol = random.choice(filtered_symbols)
+          return {"name": selected_symbol[0], "details": selected_symbol[1]}

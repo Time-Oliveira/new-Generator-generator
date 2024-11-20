@@ -1,0 +1,261 @@
+imports:
+  - import numpy, random, names
+  - from itertools import *
+  - import statistics
+  - import pandas as pd
+  - import re
+  - from typing import Union, Tuple, Optional
+  - import string
+
+syntax:
+  - rule: E -> S F
+    actions:
+      - E.dif := generator_difficult
+      - S.dif := E.dif / 2
+      - F.dif := E.dif / 2
+  - rule: S -> Select A
+    actions:
+      - A.dif := S.dif
+  - rule: A -> Attribute
+    actions:
+      - Attribute.dif := A.dif
+  - rule: F -> From T
+    actions:
+      - T.dif := F.dif
+  - rule: T -> Table
+    actions:
+      - Table.dif := sin(T.dif) + 7
+      - Table.test := pow(pow(sin(test() + 6), 2) + 8, 2)
+      - Table.target := select_table_from_symt(symbol_table, Table.dif)
+      - Attribute.target := select_attr_from_tab(Table.target, Attribute.dif)
+      - generate_table(Table.target, Attribute.target, Table.dif)
+
+columns:
+  - name: GPA
+    type: CustomFloat
+    params: [2, 0, 4]
+    dif: 2
+
+  - name: Major
+    type: RandomSelector
+    params: ['CST', 'DS', 'AI', 'STAT', 'APSY', 'ACCT', 'PRA', 'AM', 'LSE', 'EPIN', 'FIN', 'MKT', 'AE', 'BA', 'FM', 'GAD', 'BA']
+    dif: 2
+    
+  - name: Location
+    type: CustomID
+    params: ["T{1-6}|T29"]
+    dif: 2
+
+  - name: ID
+    type: CustomID
+    params: ["l1N9"]
+    dif: 2
+
+  - name: Age
+    type: CustomInt
+    params: [16, 30]
+    dif: 2
+
+  - name: Name
+    type: RandomName
+    params: [10, 15]
+    dif: 2
+
+  - name: Unit
+    type: RandomSelector
+    params: [1.0, 2.0, 3.0, 4.0]
+    dif: 2
+
+  - name: Classroom
+    type: CustomID
+    params: ["T{1-6}-{1-6}{1-2}{1-9}|T29-{1-6}{1-2}{1-9}"]
+    dif: 2
+
+# 定义表格部分
+tables:
+  - name: Course
+    columns: [ID, Name, Unit, Classroom]
+    dif: 8
+
+  - name: Student
+    columns: [ID, GPA, Age]
+    dif: 7
+
+  - name: School
+    columns: [Major, Location]
+    dif: 5
+
+constants:
+  - generator_difficult: 16
+  - test1: 9
+  - test2: 10
+
+custom_types:
+  - name: RandomName
+    code: |
+        class RandomName:
+            def __init__(self, min_length: int = 6, max_length: Optional[int] = None, 
+                        include_middle: bool = False, gender: Optional[str] = None):
+                self.min_length = min_length
+                self.max_length = max_length if max_length and max_length >= min_length else min_length + 20
+                self.include_middle = include_middle
+                self.gender = gender
+                
+                # 验证参数
+                if self.min_length < 6:
+                    raise ValueError("Minimum length should be at least 6 characters (3 for first name + space + 2 for last name)")
+                
+                if gender and gender.lower() not in ['male', 'female']:
+                    raise ValueError("Gender must be either 'male', 'female' or None")
+
+            def generate(self, format_type: str = 'full') -> str:
+                attempt_count = 0
+                max_attempts = 100  # 防止无限循环
+                
+                while attempt_count < max_attempts:
+                    # 生成基本名字部分
+                    gender = self.gender.lower() if self.gender else random.choice(['male', 'female'])
+                    first_name = names.get_first_name(gender=gender)
+                    middle_name = names.get_first_name(gender=gender) if self.include_middle else ''
+                    last_name = names.get_last_name()
+                    
+                    # 构建完整名字
+                    if self.include_middle:
+                        full_name = f"{first_name} {middle_name} {last_name}"
+                    else:
+                        full_name = f"{first_name} {last_name}"
+                        
+                    # 检查长度是否符合要求
+                    if self.min_length <= len(full_name) <= self.max_length:
+                        # 根据format_type返回不同格式
+                        if format_type == 'full':
+                            return full_name
+                        elif format_type == 'initials':
+                            initials = ''.join(name[0] for name in full_name.split())
+                            return initials
+                        elif format_type == 'first_last':
+                            return f"{first_name} {last_name}"
+                        elif format_type == 'formal':
+                            return f"{last_name}, {first_name}"
+                        else:
+                            raise ValueError("Invalid format_type")
+                            
+                    attempt_count += 1
+                    
+                raise RuntimeError(f"Could not generate name matching criteria after {max_attempts} attempts")
+
+            def generate_batch(self, count: int, unique: bool = True) -> list:
+                if unique and count > 1000:  # 设置一个合理的上限
+                    raise ValueError("For unique names, count should be less than 1000")
+                    
+                names_list = []
+                attempts = 0
+                max_attempts = count * 2  # 给予足够的尝试次数
+                
+                while len(names_list) < count and attempts < max_attempts:
+                    new_name = self.generate()
+                    if not unique or new_name not in names_list:
+                        names_list.append(new_name)
+                    attempts += 1
+                    
+                if len(names_list) < count:
+                    raise RuntimeError(f"Could not generate {count} unique names")
+                    
+                return names_list
+
+            @staticmethod
+            def get_name_stats(name: str) -> dict:
+                parts = name.split()
+                return {
+                    'total_length': len(name),
+                    'parts_count': len(parts),
+                    'each_part_length': [len(part) for part in parts],
+                    'has_middle_name': len(parts) > 2,
+                    'initials': ''.join(part[0] for part in parts)
+                }
+
+functions:
+  select_table_from_symt:
+    implementation: |
+      def select_table_from_symt(param1, param2):
+          table_symbols = [symbol for symbol in param1.symbols.values() if symbol['type'] == 'table']
+          matching_dif_symbols = [symbol for symbol in table_symbols if symbol['dif'] == param2]
+
+          if matching_dif_symbols:
+              return random.choice(matching_dif_symbols)['name']
+
+          closest_dif_symbols = sorted(table_symbols, key=lambda x: abs(x['dif'] - param2))
+          result = random.choice(closest_dif_symbols)['name'] if closest_dif_symbols else None
+
+          if result is None:
+              raise ValueError(f"Unable to find a table with a difficulty level close to {param2}")
+
+          return result
+
+  select_attr_from_tab:
+    implementation: |
+    
+        def select_attr_from_tab(param1, param2):
+
+            attribute_names = [attr.strip() for attr in symbol_table.get_symbol(param1)['value'].split(',')]
+
+            matching_attributes = [
+                attr_symbol for attr_name in attribute_names 
+                if (attr_symbol := symbol_table.get_symbol(attr_name)) and attr_symbol['dif'] == param2
+            ]
+
+            if matching_attributes:
+                return random.choice(matching_attributes)['name']
+
+            closest_attributes = [
+                attr_symbol for attr_name in attribute_names 
+                if (attr_symbol := symbol_table.get_symbol(attr_name))
+            ]
+
+            return random.choice(closest_attributes)['name'] if closest_attributes else None
+
+  generate_table:
+    implementation: |
+        def generate_table(Table_target, Attribute_target, Table_dif):
+            table_data = []
+
+            for _ in range(int(Table_dif)):
+                row = {}
+
+                # 获取属性符号和对应的生成规则
+                attr_symbol = symbol_table.get_symbol(Attribute_target)
+                attr_value = attr_symbol['value']
+                
+                # 解析出类名和参数
+                match = re.match(r"(\w+)\((.*)\)", attr_value)
+                if match:
+                    class_name = match.group(1)
+                    params_str = match.group(2).strip()
+                    
+                    # 处理多个参数，确保这些参数作为字面值（字符串）
+                    # 如果是列表，直接转换为 list
+                    if params_str.startswith('[') and params_str.endswith(']'):
+                        params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
+                    else:
+                        params = [eval(param.strip()) for param in params_str.split(",")]
+                else:
+                    raise ValueError(f"Invalid format for {Attribute_target}: {attr_value}")
+                
+                generator_class = globals().get(class_name)
+                if not generator_class:
+                    raise ValueError(f"Unknown generator class '{class_name}' for attribute '{Attribute_target}'.")
+
+                # 创建生成器实例并生成数据
+                custom_obj = generator_class(*params)
+                row[Attribute_target] = custom_obj.generate()
+
+                table_data.append(row)
+
+            # 创建 DataFrame 并打印
+            df = pd.DataFrame(table_data)
+            print(df)
+
+  test:
+    implementation: |
+      def test():
+          return 7;

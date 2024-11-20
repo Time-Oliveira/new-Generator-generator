@@ -1,0 +1,128 @@
+imports:
+  - import numpy, random, names
+  - from itertools import *
+  - import statistics
+  - import pandas as pd
+  - from typing import Union, Tuple, Optional
+  - import string
+  
+custom_types:
+  - name: CustomID
+    code: |
+        class CustomID:
+        def __init__(self, pattern):
+            self.pattern = pattern
+
+        def generate(self):
+            # 通过解析模板生成 ID
+            id_string = self._parse_pattern(self.pattern)
+            return id_string
+
+        def _parse_pattern(self, pattern):
+            """
+            解析 ID 模板，根据模板生成最终的 ID 字符串。
+            """
+            result = []
+            i = 0
+            while i < len(pattern):
+                char = pattern[i]
+                
+                # 处理大写字母部分
+                if char == 'L' and i + 1 < len(pattern) and pattern[i + 1].isdigit():
+                    count = int(pattern[i + 1])
+                    result.extend(random.choice(string.ascii_uppercase) for _ in range(count))
+                    i += 2
+                    
+                # 处理小写字母部分
+                elif char == 'l' and i + 1 < len(pattern) and pattern[i + 1].isdigit():
+                    count = int(pattern[i + 1])
+                    result.extend(random.choice(string.ascii_lowercase) for _ in range(count))
+                    i += 2
+                    
+                # 处理数字部分
+                elif char == 'N' and i + 1 < len(pattern) and pattern[i + 1].isdigit():
+                    count = int(pattern[i + 1])
+                    result.extend(random.choice(string.digits) for _ in range(count))
+                    i += 2
+                    
+                # 处理数字范围部分
+                elif char == '{':
+                    end = pattern.find('}', i)
+                    if end != -1:
+                        range_part = pattern[i+1:end]
+                        if '-' in range_part:
+                            start, end_num = map(int, range_part.split('-'))
+                            number = str(random.randint(start, end_num))
+                            result.append(number)
+                        i = end + 1
+                    else:
+                        result.append(char)
+                        i += 1
+                        
+                # 处理选择符
+                elif char == '|':
+                    options = pattern[:i].split('|') + [pattern[i+1:]]
+                    choice = random.choice(options)
+                    return self._parse_pattern(choice)
+                    
+                else:
+                    result.append(char)
+                    i += 1
+                    
+            return ''.join(result)
+
+functions:
+  calc_area:
+    implementation: |
+      def calc_area(parma):
+        return math.pi * parma * parma
+
+  format_str:
+    implementation: |
+      def format_str(template, *args):
+          return template.format(*args)
+
+  custom_mul:
+    implementation: |
+      def custom_mul(x, y1, factor=1):
+          return x * y1 * factor
+
+  generate_table:
+    implementation: |
+        def generate_table(Table_target, Attribute_target, Table_dif):
+            # 确保我们拿到的是正确的值
+            print("Inputs:", Table_target, Attribute_target, Table_dif)
+            
+            table_data = []
+            for _ in range(int(float(Table_dif))):  # 确保能正确转换数字
+                row = {}
+                table_data.append(row)
+            
+            # 创建 DataFrame 并打印
+            import pandas as pd  # 确保在函数内部导入
+            df = pd.DataFrame(table_data)
+            print(df)
+            return df  # 最好返回结果而不是只打印
+
+  generate_custom_int:
+    implementation: |
+      def generate_custom_int(min_val: int, max_val: int):
+          custom_int = CustomInt(min_val, max_val)
+          return custom_int.generate()
+
+  generate_CustomFloat:
+    implementation: |
+      def generate_CustomFloat(precision, min_val, max_val):
+          custom_float = CustomFloat(precision, min_val, max_val)
+          return custom_float.generate()
+
+  generate_CustomID:
+    implementation: |
+      def generate_CustomID(pattern: str) -> str:
+          try:
+              if 'CustomID' not in globals():
+                  raise NameError("CustomID class is not available in the global namespace")
+              custom_ID = CustomID(pattern)
+              return custom_ID.generate()
+          except Exception as e:
+              raise RuntimeError(f"Error in generate_CustomID: {str(e)}")
