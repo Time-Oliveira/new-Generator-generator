@@ -2,6 +2,7 @@
 import re
 import math
 import random
+from time import sleep
 from typing import Any, Union, List, Tuple
 from collections import deque
 from sympy import symbols, sympify
@@ -28,7 +29,7 @@ def generate_example_dfs(start_symbol, rule_map, nonterminals):
         else:
             # 如果是terminal，直接添加到结果
             executor.result.append(current_symbol)
-
+        
     # 对生成的结果进行替换, 将symbol替换为symbol.target中的值(semantics[symbol]['target'])
     for index, symbol in enumerate(executor.result):
         # 判断是否存在symbol.target
@@ -50,7 +51,8 @@ def execute_action(stmt):
             try:
                 result = executor.execute(right.strip())
                 executor._set_obj_attr(obj_name, attr, result)
-                print(f"✓ {obj_name}.{attr} = {result}")
+                print(f"✓ {obj_name}.{attr} := {right}")
+                # sleep(2)
             except StatementExecutionError as e:
                 print(e)
         else:
@@ -65,7 +67,7 @@ def execute_action(stmt):
 
 if __name__ == "__main__":
     
-    executor = DynamicExecutor(grammar_file_address = "input/grammar1.yml")
+    executor = DynamicExecutor(grammar_file_address = "input/grammar2.yml")
     # 将命名空间中的类添加到全局命名空间
     
     globals().update(executor.namespace)
