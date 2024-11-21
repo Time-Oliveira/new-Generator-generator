@@ -11,14 +11,14 @@ syntax:
 
   - rule: E -> S F
     weight:
-      S: "lambda parent_dif: parent_dif - 5 if parent_dif > 10 else 5"
-      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 5"
+      S: "lambda parent_dif: parent_dif / 4 if parent_dif > 8 else 2"
+      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 0"
 
   - rule: E -> S F W
     weight:
-      S: "lambda parent_dif: parent_dif - 8 if parent_dif > 12 else 4"
-      F: "lambda parent_dif: parent_dif - 6 if parent_dif > 10 else 4"
-      W: "lambda parent_dif, S, F: parent_dif - S - F if parent_dif - S - F > 4 else 4"
+      S: "lambda parent_dif: parent_dif /5 if parent_dif > 10 else 0"
+      F: "lambda parent_dif: parent_dif /3 if parent_dif > 10 else 0"
+      W: "lambda parent_dif, S, F: parent_dif - S - F if parent_dif - S - F > 5 else 0"
 
   - rule: S -> Select A
     weight:
@@ -33,7 +33,7 @@ syntax:
 
   - rule: F -> From ( E ) As TableName
     weight:
-      E: "lambda parent_dif: parent_dif - 2 if parent_dif > 8 else 6"
+      E: "lambda parent_dif: 0 if get_nested_depth() >= max_nested_depth else parent_dif - 2"
 
   - rule: W -> Where Z
     weight:
@@ -46,7 +46,7 @@ syntax:
   - rule: A -> Attribute, AttributeList
     weight:
       Attribute: "lambda parent_dif: 4"
-      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 6 else 4"
+      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 0"
 
   - rule: AttributeList -> Attribute
     weight:
@@ -55,16 +55,17 @@ syntax:
   - rule: T -> Table
     weight:
       Table: "lambda parent_dif: parent_dif"
+    actions:
+      - Table.details := rand(symbol_table, T.dif, 5, "table")
 
-  - rule: T -> Table Join T
-    weight:
-      Table: "lambda parent_dif: 5"
-      T: "lambda parent_dif: parent_dif - 3 if parent_dif > 8 else 5"
 
+
+# 修改WHERE相关规则
   - rule: Z -> Z OR Y
     weight:
-      Z: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else parent_dif // 2"  # 使用整除确保递减
-      Y: "lambda parent_dif: 4 if parent_dif > 8 else parent_dif // 2"
+      Z: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
+      Y: "lambda parent_dif,Z: parent_dif - Z if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
+
 
   - rule: Z -> Y
     weight:
@@ -72,8 +73,8 @@ syntax:
 
   - rule: Y -> Y AND C
     weight:
-      Y: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else parent_dif // 2"
-      C: "lambda parent_dif: 4 if parent_dif > 8 else parent_dif // 2"
+      Y: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
+      C: "lambda parent_dif,Y: parent_dif - Y if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
 
   - rule: Y -> C
     weight:
@@ -85,7 +86,7 @@ syntax:
 
   - rule: C -> NOT C
     weight:
-      C: "lambda parent_dif: parent_dif"
+      C: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else 0"
 
   - rule: C -> P
     weight:
@@ -93,25 +94,25 @@ syntax:
 
   - rule: P -> Attribute O Value
     weight:
-      Attribute: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else 4"
-      O: "lambda parent_dif: 4"
+      Attribute: "lambda parent_dif: parent_dif - 4 if parent_dif > 0 else 4"
+      O: "lambda parent_dif: 2"
       Value: "lambda parent_dif: 2"
 
   - rule: P -> Attribute O Attribute
     weight:
-      Attribute1: "lambda parent_dif: parent_dif - 6 if parent_dif > 10 else 4"
-      O: "lambda parent_dif: 4"
-      Attribute2: "lambda parent_dif: 4"
+      Attribute1: "lambda parent_dif: parent_dif - 4 if parent_dif > 0 else 4"
+      O: "lambda parent_dif: 2"
+      Attribute2: "lambda parent_dif: 2"
 
   - rule: P -> Attribute = Attribute
     weight:
-      Attribute1: "lambda parent_dif: parent_dif - 2 if parent_dif > 4 else 2"
-      Attribute2: "lambda parent_dif: parent_dif - 2 if parent_dif > 4 else 2"
+      Attribute1: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 2"
+      Attribute2: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 2"
 
   - rule: P -> A IN ( E )
     weight:
-      A: "lambda parent_dif: parent_dif - 3 if parent_dif > 6 else 3"
-      E: "lambda parent_dif: parent_dif - 2 if parent_dif > 5 else 3"
+      A: "lambda parent_dif: parent_dif / 4 if parent_dif > 10 else 0"
+      E: "lambda parent_dif,A: parent_dif - A if parent_dif > 7 else 0"
 
   - rule: P -> EXISTS ( E )
     weight:
@@ -207,18 +208,18 @@ constants:
 functions:
   rand:
     implementation: |
-      def rand(symbol_table, Table_DOT_dif, tolerance, expected_type="table"):  # 默认值为 "table"
+      def rand(symbol_table, Table_DOT_dif, tolerance, expected_type):  # 默认值为 "table"
           
           # print(f"Debug: Received parameters -> Table_DOT_dif: {Table_DOT_dif}, tolerance: {tolerance}, expected_type: {expected_type}")
 
           # 确保参数有效
-          if Table_DOT_dif is None:
-              raise ValueError("Table_DOT_dif is None")
-          if symbol_table is None:
-              raise ValueError("symbol_table is None")
-          if expected_type is None:
-              expected_type = 'table'
-             # raise ValueError("expected_type is None")
+          #if Table_DOT_dif is None:
+          #    raise ValueError("Table_DOT_dif is None")
+          #if symbol_table is None:
+          #    raise ValueError("symbol_table is None")
+          #if expected_type is None:
+          #    expected_type = 'table'
+          #   # raise ValueError("expected_type is None")
 
           # 解决浮点误差问题
           if tolerance is None:
@@ -231,13 +232,13 @@ functions:
               if details and 'dif' in details and abs(details['dif'] - Table_DOT_dif) <= tolerance and details.get('type') == expected_type
           ]
 
-          # print(f"Filtered symbols (Table_DOT_dif: {Table_DOT_dif}, tolerance: {tolerance}, expected_type: {expected_type}): {filtered_symbols}")
+           print(f"难度： (Table_DOT_dif: {Table_DOT_dif}, 容忍度：: {tolerance}, 期望类型为: {expected_type})可选表为: {filtered_symbols}")
 
           if not filtered_symbols:
               raise ValueError(f"No matching symbol found with the specified difficulty: {Table_DOT_dif} and type: {expected_type}. Consider adjusting tolerance or checking the type.")
 
           selected_symbol = random.choice(filtered_symbols)
-          return {"name": selected_symbol[0], "details": selected_symbol[1]}
+          return {"此次运行rand函数选择的表名为": selected_symbol[0], "details": selected_symbol[1]}
 
   check_difficulty:
     implementation: |
