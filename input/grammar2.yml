@@ -210,8 +210,6 @@ functions:
     implementation: |
       def rand(symbol_table, Table_DOT_dif, tolerance, expected_type):  # 默认值为 "table"
           
-          # print(f"Debug: Received parameters -> Table_DOT_dif: {Table_DOT_dif}, tolerance: {tolerance}, expected_type: {expected_type}")
-
           # 确保参数有效
           #if Table_DOT_dif is None:
           #    raise ValueError("Table_DOT_dif is None")
@@ -232,7 +230,7 @@ functions:
               if details and 'dif' in details and abs(details['dif'] - Table_DOT_dif) <= tolerance and details.get('type') == expected_type
           ]
 
-           print(f"难度： (Table_DOT_dif: {Table_DOT_dif}, 容忍度：: {tolerance}, 期望类型为: {expected_type})可选表为: {filtered_symbols}")
+          print(f"难度： (Table_DOT_dif: {Table_DOT_dif}, 容忍度：: {tolerance}, 期望类型为: {expected_type})可选表为: {filtered_symbols}")
 
           if not filtered_symbols:
               raise ValueError(f"No matching symbol found with the specified difficulty: {Table_DOT_dif} and type: {expected_type}. Consider adjusting tolerance or checking the type.")
