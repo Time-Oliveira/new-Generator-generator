@@ -12,7 +12,8 @@ def analyze_syntax(syntax_rules):
     rule_map = {}
 
     for rule in syntax_rules:
-        left_side, right_side = rule['rule'].split("->")
+        rule_str = rule['rule']
+        left_side, right_side = rule_str.split("->")
         left_side = left_side.strip()
         right_side = right_side.strip().split()
 
@@ -21,12 +22,14 @@ def analyze_syntax(syntax_rules):
 
         # 添加规则和对应的动作到映射表
         rule_entry = {
+            "rule": rule_str,  # 保存完整的规则字符串
             "rules": right_side,
-            "actions": rule.get("actions", [])  # 处理可能没有 actions 的情况
+            "actions": rule.get("actions", []),
+            "weight": rule.get("weight", {})
         }
         rule_map.setdefault(left_side, []).append(rule_entry)
 
-    terminals = right_symbols - left_symbols  # 终结符是右侧符号减去左侧符号
+    terminals = right_symbols - left_symbols
     nonterminals = left_symbols
     return nonterminals, terminals, rule_map, left_symbols, right_symbols
 
