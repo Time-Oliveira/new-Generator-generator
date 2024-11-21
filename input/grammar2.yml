@@ -1,64 +1,76 @@
-imports:
-  - import random
-
 syntax:
   - rule: L -> E
     actions:
       - L.dif := generator_difficult
       - E.dif := L.dif
+      - TableName.number := np.array(['T1','T2','T3'])  # 确保已导入num
+
+
   - rule: E -> S F
     actions:
-      - S.dif := E.dif / 2
+      - S.dif := E.dif / 4
       - F.dif := E.dif - S.dif
   - rule: E -> S F W
     actions:
-      - E.dif := generator_difficult
-      # 检查难度值是否足够继续展开
-      - E.can_expand := check_difficulty(E.dif)
-      - S.dif := E.dif / 3 if E.can_expand else 0
-      - F.dif := E.dif - S.dif if E.can_expand else 0
-      - W.dif := E.dif - F.dif if E.can_expand else 0
+      - S.dif := E.dif / 4
+      - F.dif := E.dif / 3
+      - W.dif := E.dif - F.dif - S.dif
+
+
   - rule: S -> Select A
     actions:
       - A.dif := S.dif
   - rule: S -> Select *
-  - rule: W -> Where Z
     actions:
-      - Z.dif := W.dif
+      - F.dif := F.dif + S.dif
+      - S.dif := 0
+
+
   - rule: F -> From T
     actions:
       - T.dif := F.dif
   - rule: F -> From ( E ) As TableName
     actions:
-      # 检查是否有足够的难度来展开子查询
-      - F.can_expand := check_difficulty(F.dif)
-      - E.dif := F.dif if F.can_expand else 0
-      # 如果难度不够，使用简单表
-      - F.target := get_simple_value("table") if not F.can_expand else None
+      - E.dif := F.dif
+
+
+  - rule: W -> Where Z
+    actions:
+      - Z.dif := W.dif
+
+
   - rule: A -> Attribute
     actions:
-      - Attribute.dif := A.dif
-  - rule: A -> Attribute, A
-    actions:
-       - Attribute.dif := 2
-       - A.dif := A.dif - Attribute.dif
+      - Attribute.dif := 1
+      - A.dif := A.dif - Attribute.dif
 
-  - rule: O -> Operator
+  - rule: A -> Attribute, AttributeList
     actions:
-      - Operator.dif := O.dif
+      - Attribute.dif := 1
+      - AttributeList.dif := A.dif - Attribute.dif
+
+  - rule: AttributeList -> Attribute
+    actions:
+      - AttributeList.dif := Attribute.dif
+
+  - rule: AttributeList -> Attribute AttributeList
+    actions:
+      - Attribute.dif := 1
+      - AttributeList.dif := AttributeList.dif - Attribute.dif
+
+
 
   - rule: T -> Table
     actions:
-      - T.can_expand := check_difficulty(T.dif)
-      - Table.dif := T.dif if T.can_expand else 0
-      - Table.details := rand(symbol_table, Table.dif, 5, "table") if T.can_expand else get_simple_value("table")
+      - Table.dif := T.dif
+      - Table.details := rand(symbol_table, T.dif, 5, "table")
 
   - rule: T -> Table Join T
     actions:
-      - T.can_expand := check_difficulty(T.dif)
-      - Table.dif := T.dif / 2 if T.can_expand else 0
-      - T.dif := T.dif - Table.dif if T.can_expand else 0
-      - Table.details := rand(symbol_table, Table.dif, 5, "table") if T.can_expand else get_simple_value("table")
+      - Table.dif := T.dif / 2
+      - T.dif := T.dif - Table.dif
+      - Table.details := rand(symbol_table, T.dif, 5, "table")
+
 
   - rule: Z -> Z OR Y
     actions:
@@ -74,25 +86,38 @@ syntax:
   - rule: Y -> C
     actions:
       - C.dif := Y.dif
+
   - rule: C -> ( Z )
     actions:
-      - Z.dif := Y.dif
+      - Z.dif := C.dif
+
   - rule: C -> NOT C
     actions:
       - C.dif := C.dif
   - rule: C -> P
     actions:
       - P.dif := C.dif
-  - rule: P -> A O Value
+
+
+
+  - rule: P -> Attribute O Value
     actions:
-      - A.dif := P.dif / 3
+      - Attribute.dif := P.dif / 3
       - O.dif := P.dif - A.dif
       - Value.dif := 0
-  - rule: P -> A O Attribute
+
+  - rule: P -> Attribute O Attribute
     actions:
-      - A.dif := P.dif / 3
+      - Attribute.dif := P.dif / 3
       - O.dif := P.dif - A.dif
-      - Attribute.dif := P.dif - O.dif
+      - Attribute.dif := P.dif - O.dif - Attribute.dif
+      -
+  - rule: P -> Attribute = Attribute
+    actions:
+      - Attribute.dif := P.dif / 3
+      #- =.dif := 1
+      - Attribute.dif := P.dif - 1 - Attribute.dif
+
   - rule: P -> A IN ( E )
     actions:
       - A.dif := P.dif / 4
@@ -101,68 +126,72 @@ syntax:
     actions:
       - E.dif := P.dif
 
+#
+
+
+
 # 定义属性部分
 columns:
   - name: GPA
     type: LimitedFloat
     params: [1, 1.0, 4.0]
-    dif: 2
+    dif: 1
 
   - name: Major
     type: CustomString
     params: [20]
-    dif: 2
+    dif: 1
 
   - name: Location
     type: CustomString
     params: [20]
-    dif: 2
+    dif: 1
 
   - name: ID
     type: CustomInt
     params: [1000, 9999]
-    dif: 2
+    dif: 1
 
   - name: Age
     type: CustomInt
     params: [18, 25]
-    dif: 2
+    dif: 1
 
   - name: Name
     type: CustomString
     params: [10]
-    dif: 2
+    dif: 1
 
   - name: Unit
     type: UnitFloat
     params: [1.0, 2.0, 3.0, 4.0]
-    dif: 2
+    dif: 1
 
   - name: Classroom
     type: CustomString
     params: [5]
-    dif: 2
+    dif: 1
 
   # 新增属性部分
   - name: Subject
     type: CustomString
     params: [20]
-    dif: 3
+    dif: 1
 
   - name: Salary
     type: LimitedFloat
     params: [3000, 5000, 10000]
-    dif: 4
+    dif: 1
 
   - name: Experience
     type: CustomInt
     params: [1, 10]
-    dif: 3
+    dif: 1
 
   - name: Department
     type: CustomString
     params: [15]
-    dif: 3
+    dif: 1
 
 
 # 定义表格部分
@@ -185,57 +214,91 @@ tables:
     dif: 6
 
 constants:
-  - generator_difficult: 20  # 初始难度值
-  - min_difficulty: 1.0     # 最小难度阈值
+  #储存symboltable的结构体叫symbol_table
+  - generator_difficult: 20
+  - tolerance: 2
+  - expected_type_table: 'table'
+  - expected_type_column: 'columns'
 
 functions:
   rand:
+    params:
+      - name: symbol_table
+        type: symbol_table
+      - name: Table_DOT_dif
+        type: column
+      - name: tolerance
+        type: constant
+      - name: expected_type_table
+        type: constant
+
     implementation: |
-      def rand(symbol_table, Table_DOT_dif, tolerance, expected_type="table"):  # 默认值为 "table"
+      def rand(symbol_table, Table_DOT_dif, tolerance, expected_type_table):  
+          import random
           
-          # print(f"Debug: Received parameters -> Table_DOT_dif: {Table_DOT_dif}, tolerance: {tolerance}, expected_type: {expected_type}")
+          #print(f"Debug: Received parameters -> Table_DOT_dif: {Table_DOT_dif}, tolerance: {tolerance}, expected_type_table: {expected_type_table}")
 
           # 确保参数有效
-          if Table_DOT_dif is None:
-              raise ValueError("Table_DOT_dif is None")
-          if symbol_table is None:
-              raise ValueError("symbol_table is None")
-          if expected_type is None:
-              expected_type = 'table'
-             # raise ValueError("expected_type is None")
+          #if Table_DOT_dif is None:
+          #    raise ValueError("Table_DOT_dif is None")
+          #if symbol_table is None:
+          #    raise ValueError("symbol_table is None")
+          #if expected_type_table is None:
+              
+          #    raise ValueError("expected_type_table is None")
 
           # 解决浮点误差问题
           if tolerance is None:
               tolerance = 5  # 默认值
-          tolerance += 1e-9
+          #tolerance += 1e-9
 
           # 使用 difficulty 和类型过滤 symbol_table 中的符号
           filtered_symbols = [
               (name, details) for name, details in symbol_table.symbols.items()
-              if details and 'dif' in details and abs(details['dif'] - Table_DOT_dif) <= tolerance and details.get('type') == expected_type
+              if details and 'dif' in details and abs(details['dif'] - Table_DOT_dif) <= tolerance and details.get('type') == expected_type_table
           ]
 
-          # print(f"Filtered symbols (Table_DOT_dif: {Table_DOT_dif}, tolerance: {tolerance}, expected_type: {expected_type}): {filtered_symbols}")
+          print(f"符合容忍度{tolerance}，难度：{Table_DOT_dif}下的可选类型: {expected_type_table}: 为{filtered_symbols}")
 
           if not filtered_symbols:
-              raise ValueError(f"No matching symbol found with the specified difficulty: {Table_DOT_dif} and type: {expected_type}. Consider adjusting tolerance or checking the type.")
-
+              raise ValueError(f"No matching symbol found with the specified difficulty: {Table_DOT_dif} and type: {expected_type_table}. Consider adjusting tolerance or checking the type.")
+          
           selected_symbol = random.choice(filtered_symbols)
+           #######
+          # 打印选定表的信息
+          print(f"确定的表: {selected_symbol[0]}")
+          #######
           return {"name": selected_symbol[0], "details": selected_symbol[1]}
 
-  check_difficulty:
-    implementation: |
-      def check_difficulty(current_dif):
-          """检查当前难度值是否允许继续展开"""
-          if current_dif is None:
-              return True
-          return float(current_dif) > 1.0  # 设置最小难度阈值为1.0
 
-  # 添加获取简单规则的函数
-  get_simple_value:
+
+  check_dif:
+    params:
+      - name: Symbol_DOT_dif
+        type: column
+
     implementation: |
-      def get_simple_value(symbol_type):
-          """当难度值过低时返回简单值"""
-          if symbol_type == "table":
-              return "SimpleTable"
-          return None
+      def check_dif(Symbol_DOT_dif):  
+          import random
+          
+          #print(f"Debug: Received parameters -> Symbol_DOT_dif: {Symbol_DOT_dif}")
+
+          # 确保参数有效
+          if Symbol_DOT_dif is None:
+              raise ValueError("Symbol_DOT_dif is None")
+              
+          # 获取当前符号和难度值
+          current_symbol = Symbol_DOT_dif.get('symbol', '')
+          difficulty = Symbol_DOT_dif.get('dif', 0)
+          
+          # 检查条件
+          # 条件1: Symbol为T且难度小于5或大于10时返回False
+          if current_symbol == 'T' and (difficulty < 5 or difficulty > 10):
+              return False
+              
+          # 条件2: Symbol为A且难度小于1时返回False
+          if current_symbol == 'A' and difficulty < 1:
+              return False
+              
+          # 其他情况都返回True
+          return True
