@@ -6,29 +6,55 @@ imports:
   - import re
   - from typing import Union, Tuple, Optional
   - import string
+  - from math import *
 
 syntax:
+  - rule: L -> E
+    weight:
+      E: "lambda parent_dif: generator_difficult"
+
   - rule: E -> S F
-    actions:
-      - E.dif := generator_difficult
-      - S.dif := E.dif / 2
-      - F.dif := E.dif / 2
+    weight:
+      S: "lambda parent_dif: parent_dif / 4 if parent_dif > 8 else 2"
+      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 0"
+
   - rule: S -> Select A
-    actions:
-      - A.dif := S.dif
+    weight:
+      A: "lambda parent_dif: parent_dif"
+
   - rule: A -> Attribute
-    actions:
-      - Attribute.dif := A.dif
+    weight:
+      Attribute: "lambda parent_dif: parent_dif"
+
+  - rule: S -> Select *
+    weight: {} # 空的weight表示这是一个终结规则
+
   - rule: F -> From T
-    actions:
-      - T.dif := F.dif
+    weight:
+      T: "lambda parent_dif: parent_dif"
+
   - rule: T -> Table
+    weight:
+      Table: "lambda parent_dif: parent_dif"
     actions:
-      - Table.dif := sin(T.dif) + 7
-      - Table.test := pow(pow(sin(test() + 6), 2) + 8, 2)
-      - Table.target := select_table_from_symt(symbol_table, Table.dif)
-      - Attribute.target := select_attr_from_tab(Table.target, Attribute.dif)
-      - generate_table(Table.target, Attribute.target, Table.dif)
+      - Table.target := select_table_from_symt(symbol_table, weight['Table'])
+      - Attribute.target := get_attribute_target(Table.target, weight, self.result)
+      - generate_table(Table.target, Attribute.target, weight['Table'])
+
+
+
+
+  - rule: A -> Attribute, AttributeList
+    weight:
+      Attribute: "lambda parent_dif: 4"
+      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 0"
+
+  - rule: AttributeList -> Attribute
+    weight:
+      Attribute: "lambda parent_dif: parent_dif"
+
+
+
 
 columns:
   - name: GPA
@@ -86,9 +112,8 @@ tables:
     dif: 5
 
 constants:
-  - generator_difficult: 16
-  - test1: 9
-  - test2: 10
+  - generator_difficult: 20  # 初始难度值
+  - threshold: 0.0     # 难度阈值
 
 custom_types:
   - name: RandomName
@@ -215,47 +240,80 @@ functions:
             return random.choice(closest_attributes)['name'] if closest_attributes else None
 
   generate_table:
-    implementation: |
-        def generate_table(Table_target, Attribute_target, Table_dif):
-            table_data = []
+      implementation: |
+          def generate_table(Table_target, Attribute_target, Table_dif):
+              table_data = []
 
-            for _ in range(int(Table_dif)):
-                row = {}
+              # 处理 SELECT * 的情况
+              if Attribute_target == "ALL":
+                  # 获取表的所有列
+                  table_symbol = symbol_table.get_symbol(Table_target)
+                  all_attributes = [attr.strip() for attr in table_symbol['value'].split(',')]
+                  
+                  for _ in range(int(Table_dif)):
+                      row = {}
+                      for attr in all_attributes:
+                          # 获取属性符号和对应的生成规则
+                          attr_symbol = symbol_table.get_symbol(attr)
+                          attr_value = attr_symbol['value']
+                          
+                          # 解析出类名和参数
+                          match = re.match(r"(\w+)\((.*)\)", attr_value)
+                          if match:
+                              class_name = match.group(1)
+                              params_str = match.group(2).strip()
+                              
+                              # 处理多个参数
+                              if params_str.startswith('[') and params_str.endswith(']'):
+                                  params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
+                              else:
+                                  params = [eval(param.strip()) for param in params_str.split(",")]
+                                  
+                              generator_class = globals().get(class_name)
+                              if not generator_class:
+                                  raise ValueError(f"Unknown generator class '{class_name}' for attribute '{attr}'.")
 
-                # 获取属性符号和对应的生成规则
-                attr_symbol = symbol_table.get_symbol(Attribute_target)
-                attr_value = attr_symbol['value']
-                
-                # 解析出类名和参数
-                match = re.match(r"(\w+)\((.*)\)", attr_value)
-                if match:
-                    class_name = match.group(1)
-                    params_str = match.group(2).strip()
-                    
-                    # 处理多个参数，确保这些参数作为字面值（字符串）
-                    # 如果是列表，直接转换为 list
-                    if params_str.startswith('[') and params_str.endswith(']'):
-                        params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
-                    else:
-                        params = [eval(param.strip()) for param in params_str.split(",")]
-                else:
-                    raise ValueError(f"Invalid format for {Attribute_target}: {attr_value}")
-                
-                generator_class = globals().get(class_name)
-                if not generator_class:
-                    raise ValueError(f"Unknown generator class '{class_name}' for attribute '{Attribute_target}'.")
+                              # 创建生成器实例并生成数据
+                              custom_obj = generator_class(*params)
+                              row[attr] = custom_obj.generate()
+                              
+                      table_data.append(row)
+              else:
+                  # 原有的单列处理逻辑
+                  for _ in range(int(Table_dif)):
+                      row = {}
+                      attr_symbol = symbol_table.get_symbol(Attribute_target)
+                      attr_value = attr_symbol['value']
+                      
+                      match = re.match(r"(\w+)\((.*)\)", attr_value)
+                      if match:
+                          class_name = match.group(1)
+                          params_str = match.group(2).strip()
+                          
+                          if params_str.startswith('[') and params_str.endswith(']'):
+                              params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
+                          else:
+                              params = [eval(param.strip()) for param in params_str.split(",")]
+                              
+                          generator_class = globals().get(class_name)
+                          if not generator_class:
+                              raise ValueError(f"Unknown generator class '{class_name}' for attribute '{Attribute_target}'.")
 
-                # 创建生成器实例并生成数据
-                custom_obj = generator_class(*params)
-                row[Attribute_target] = custom_obj.generate()
+                          custom_obj = generator_class(*params)
+                          row[Attribute_target] = custom_obj.generate()
 
-                table_data.append(row)
+                      table_data.append(row)
 
-            # 创建 DataFrame 并打印
-            df = pd.DataFrame(table_data)
-            print(df)
+              # 创建 DataFrame 并打印
+              df = pd.DataFrame(table_data)
+              print(df)
 
   test:
     implementation: |
       def test():
           return 7;
+
+  get_attribute_target:
+    implementation: |
+      def get_attribute_target(table_target, weight, result):
+          return 'ALL' if result[1] == '*' else select_attr_from_tab(table_target, weight['Attribute'])

@@ -11,14 +11,15 @@ syntax:
 
   - rule: E -> S F
     weight:
-      S: "lambda parent_dif: parent_dif / 4 if parent_dif > 8 else 2"
-      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 0"
+      S: "lambda parent_dif: parent_dif - 5 if parent_dif > 10 else 5"
+      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 5"
+    actions:
 
   - rule: E -> S F W
     weight:
-      S: "lambda parent_dif: parent_dif /5 if parent_dif > 10 else 0"
-      F: "lambda parent_dif: parent_dif /3 if parent_dif > 10 else 0"
-      W: "lambda parent_dif, S, F: parent_dif - S - F if parent_dif - S - F > 5 else 0"
+      S: "lambda parent_dif: parent_dif - 8 if parent_dif > 12 else 4"
+      F: "lambda parent_dif: parent_dif - 6 if parent_dif > 10 else 4"
+      W: "lambda parent_dif, S, F: parent_dif - S - F if parent_dif - S - F > 4 else 4"
 
   - rule: S -> Select A
     weight:
@@ -31,10 +32,6 @@ syntax:
     weight:
       T: "lambda parent_dif: parent_dif"
 
-  - rule: F -> From ( E ) As TableName
-    weight:
-      E: "lambda parent_dif: 0 if get_nested_depth() >= max_nested_depth else parent_dif - 2"
-
   - rule: W -> Where Z
     weight:
       Z: "lambda parent_dif: parent_dif"
@@ -46,26 +43,22 @@ syntax:
   - rule: A -> Attribute, AttributeList
     weight:
       Attribute: "lambda parent_dif: 4"
-      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 0"
+      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 6 else 4"
 
   - rule: AttributeList -> Attribute
     weight:
       Attribute: "lambda parent_dif: parent_dif"
 
   - rule: T -> Table
-    weight:
+    weight:                                                                                                                                                                                                                                                                                                                                                                                                                                        
       Table: "lambda parent_dif: parent_dif"
     actions:
-      - Table.details := rand(symbol_table, T.dif, 5, "table")
+      # - Table.target := select_table_from_symt(symbol_table, Table.dif)
 
-
-
-# 修改WHERE相关规则
   - rule: Z -> Z OR Y
     weight:
-      Z: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
-      Y: "lambda parent_dif,Z: parent_dif - Z if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
-
+      Z: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else parent_dif // 2"  # 使用整除确保递减
+      Y: "lambda parent_dif: 4 if parent_dif > 8 else parent_dif // 2"
 
   - rule: Z -> Y
     weight:
@@ -73,20 +66,16 @@ syntax:
 
   - rule: Y -> Y AND C
     weight:
-      Y: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
-      C: "lambda parent_dif,Y: parent_dif - Y if parent_dif > 8 and get_nested_depth() < max_nested_depth else 0"
+      Y: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else parent_dif // 2"
+      C: "lambda parent_dif: 4 if parent_dif > 8 else parent_dif // 2"
 
   - rule: Y -> C
     weight:
       C: "lambda parent_dif: parent_dif"
 
-  - rule: C -> ( Z )
-    weight:
-      Z: "lambda parent_dif: parent_dif"
-
   - rule: C -> NOT C
     weight:
-      C: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else 0"
+      C: "lambda parent_dif: parent_dif"
 
   - rule: C -> P
     weight:
@@ -94,29 +83,20 @@ syntax:
 
   - rule: P -> Attribute O Value
     weight:
-      Attribute: "lambda parent_dif: parent_dif - 4 if parent_dif > 0 else 4"
-      O: "lambda parent_dif: 2"
+      Attribute: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else 4"
+      O: "lambda parent_dif: 4"
       Value: "lambda parent_dif: 2"
 
   - rule: P -> Attribute O Attribute
     weight:
-      Attribute1: "lambda parent_dif: parent_dif - 4 if parent_dif > 0 else 4"
-      O: "lambda parent_dif: 2"
-      Attribute2: "lambda parent_dif: 2"
+      Attribute1: "lambda parent_dif: parent_dif - 6 if parent_dif > 10 else 4"
+      O: "lambda parent_dif: 4"
+      Attribute2: "lambda parent_dif: 4"
 
   - rule: P -> Attribute = Attribute
     weight:
-      Attribute1: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 2"
-      Attribute2: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 2"
-
-  - rule: P -> A IN ( E )
-    weight:
-      A: "lambda parent_dif: parent_dif / 4 if parent_dif > 10 else 0"
-      E: "lambda parent_dif,A: parent_dif - A if parent_dif > 7 else 0"
-
-  - rule: P -> EXISTS ( E )
-    weight:
-      E: "lambda parent_dif: parent_dif"  # 完全传递难度
+      Attribute1: "lambda parent_dif: parent_dif - 2 if parent_dif > 4 else 2"
+      Attribute2: "lambda parent_dif: parent_dif - 2 if parent_dif > 4 else 2"
 
 # 定义属性部分
 columns:
@@ -206,37 +186,84 @@ constants:
   - threshold: 0.0     # 难度阈值
 
 functions:
-  rand:
+  select_table_from_symt:
     implementation: |
-      def rand(symbol_table, Table_DOT_dif, tolerance, expected_type):  # 默认值为 "table"
-          
-          # 确保参数有效
-          #if Table_DOT_dif is None:
-          #    raise ValueError("Table_DOT_dif is None")
-          #if symbol_table is None:
-          #    raise ValueError("symbol_table is None")
-          #if expected_type is None:
-          #    expected_type = 'table'
-          #   # raise ValueError("expected_type is None")
+      def select_table_from_symt(param1, param2):
+          table_symbols = [symbol for symbol in param1.symbols.values() if symbol['type'] == 'table']
+          matching_dif_symbols = [symbol for symbol in table_symbols if symbol['dif'] == param2]
 
-          # 解决浮点误差问题
-          if tolerance is None:
-              tolerance = 5  # 默认值
-          tolerance += 1e-9
+          if matching_dif_symbols:
+              return random.choice(matching_dif_symbols)['name']
 
-          # 使用 difficulty 和类型过滤 symbol_table 中的符号
-          filtered_symbols = [
-              (name, details) for name, details in symbol_table.symbols.items()
-              if details and 'dif' in details and abs(details['dif'] - Table_DOT_dif) <= tolerance and details.get('type') == expected_type
-          ]
+          closest_dif_symbols = sorted(table_symbols, key=lambda x: abs(x['dif'] - param2))
+          result = random.choice(closest_dif_symbols)['name'] if closest_dif_symbols else None
 
-          print(f"难度： (Table_DOT_dif: {Table_DOT_dif}, 容忍度：: {tolerance}, 期望类型为: {expected_type})可选表为: {filtered_symbols}")
+          if result is None:
+              raise ValueError(f"Unable to find a table with a difficulty level close to {param2}")
 
-          if not filtered_symbols:
-              raise ValueError(f"No matching symbol found with the specified difficulty: {Table_DOT_dif} and type: {expected_type}. Consider adjusting tolerance or checking the type.")
+          return result
 
-          selected_symbol = random.choice(filtered_symbols)
-          return {"此次运行rand函数选择的表名为": selected_symbol[0], "details": selected_symbol[1]}
+  select_table_from_symt:
+    implementation: |
+        def select_attr_from_tab(param1, param2):
+
+            attribute_names = [attr.strip() for attr in symbol_table.get_symbol(param1)['value'].split(',')]
+
+            matching_attributes = [
+                attr_symbol for attr_name in attribute_names 
+                if (attr_symbol := symbol_table.get_symbol(attr_name)) and attr_symbol['dif'] == param2
+            ]
+
+            if matching_attributes:
+                return random.choice(matching_attributes)['name']
+
+            closest_attributes = [
+                attr_symbol for attr_name in attribute_names 
+                if (attr_symbol := symbol_table.get_symbol(attr_name))
+            ]
+
+            return random.choice(closest_attributes)['name'] if closest_attributes else None
+
+  generate_table:
+    implementation: |
+        def generate_table(Table_target, Attribute_target, Table_dif):
+            table_data = []
+
+            for _ in range(int(Table_dif)):
+                row = {}
+
+                # 获取属性符号和对应的生成规则
+                attr_symbol = symbol_table.get_symbol(Attribute_target)
+                attr_value = attr_symbol['value']
+                
+                # 解析出类名和参数
+                match = re.match(r"(\w+)\((.*)\)", attr_value)
+                if match:
+                    class_name = match.group(1)
+                    params_str = match.group(2).strip()
+                    
+                    # 处理多个参数，确保这些参数作为字面值（字符串）
+                    # 如果是列表，直接转换为 list
+                    if params_str.startswith('[') and params_str.endswith(']'):
+                        params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
+                    else:
+                        params = [eval(param.strip()) for param in params_str.split(",")]
+                else:
+                    raise ValueError(f"Invalid format for {Attribute_target}: {attr_value}")
+                
+                generator_class = globals().get(class_name)
+                if not generator_class:
+                    raise ValueError(f"Unknown generator class '{class_name}' for attribute '{Attribute_target}'.")
+
+                # 创建生成器实例并生成数据
+                custom_obj = generator_class(*params)
+                row[Attribute_target] = custom_obj.generate()
+
+                table_data.append(row)
+
+            # 创建 DataFrame 并打印
+            df = pd.DataFrame(table_data)
+            print(df)
 
   check_difficulty:
     implementation: |

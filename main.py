@@ -97,6 +97,8 @@ def generate_example_dfs(start_symbol, rule_map, nonterminals):
                         # 处理actions（如果存在）
                         actions = chosen_rule.get('actions', [])
                         if actions:
+                            # 创建weight字典，供actions使用
+                            weight = calculated_weights
                             for action in actions:
                                 execute_action(action)
                         break
@@ -144,7 +146,7 @@ def execute_action(stmt):
         print(f"\n语法错误:\n语句: {stmt}\n错误: {str(e)}")
 
 if __name__ == "__main__":
-    executor = DynamicExecutor(grammar_file_address = "input/grammar2.yml")
+    executor = DynamicExecutor(grammar_file_address = "input/grammar1.yml")
     globals().update(executor.namespace)
 
     nonterminals, terminals, rule_map, left_symbols, right_symbols = analyze_syntax(executor.grammar['syntax'])

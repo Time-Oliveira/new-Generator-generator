@@ -379,9 +379,16 @@ class DynamicExecutor:
         try:
             exec_locals = {}
             exec_locals.update(self.variables)
+            # 获取当前规则的权重值
+            calculated_weights = {
+                name: attrs.get('dif', 0) 
+                for name, attrs in self.variables.items()
+                if 'dif' in attrs
+            }
             # 在执行环境中包含常量、函数和动态变量
             exec_globals = {
                 'self': self,
+                'weight': calculated_weights,  # 添加weight字典
                 **self.global_context,
                 **self.constants,
                 **self.functions
@@ -407,7 +414,7 @@ class DynamicExecutor:
                 modified_expr=modified_expr,
                 variables=context
             )
-
+    
     def get_execution_stats(self):
         total = self.success_count + self.error_count
         success_rate = (self.success_count / total) * 100 if total > 0 else 0
