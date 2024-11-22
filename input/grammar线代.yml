@@ -1,0 +1,110 @@
+imports:
+  - import random
+  - import numpy as np
+
+syntax:
+  - rule: E -> M1 * M2
+    weight:
+      M1: "lambda parent_dif: (parent_dif - 6) / 2"
+      M2: "lambda parent_dif, M1: M1"
+    actions:
+      - E.row := M1.row
+      - E.column := M2.column
+      - M2.row := M1.column
+
+  - rule: M1 -> [ R ]
+    weight:
+      R: "lambda parent_dif: parent_dif"
+    actions:
+      - M1.rowsCounter := 1
+
+  - rule: R -> L ; R
+    weight:
+      L: "lambda parent_dif: parent_dif if M1.rowCounter <= M1.row else 0"
+      R: "lambda parent_dif: parent_dif if M1.rowCounter <= M1.row else 0"
+    actions:
+      - M1.rowsCounter := M1.rowsCounter + 1
+      - M1.columnsCounter := 1
+
+  - rule: R -> L
+    weight:
+      L: "lambda parent_dif: parent_dif if M1.rowCounter >= M1.row else 0"
+
+  - rule: L -> N , L
+    weight:
+      N: "lambda parent_dif: parent_dif if M1.columnsCounter <= M1.columns else 0"
+      L: "lambda parent_dif: parent_dif if M1.columnsCounter <= M1.columns else 0"
+    actions:
+      - M1.columnCounter := M1.columnCounter + 1
+
+  - rule: L -> N
+    weight:
+      N: "lambda parent_dif: parent_dif if M1.columnsCounter == M1.columns else 0"
+    actions:
+      - M1.columnsCounter := 1
+
+  - rule: M2 -> [ R' ]
+    weight:
+      "R'": "lambda parent_dif: parent_dif"
+    actions:
+      - M2.rowsCounter := 1
+
+  - rule: "R' -> L' ; R'"
+    weight:
+      "L'": "lambda parent_dif: parent_dif if M2.rowCounter <= M2.row else 0"
+      "R'": "lambda parent_dif: parent_dif if M2.rowCounter <= M2.row else 0"
+    actions:
+      - M2.rowsCounter := M2.rowsCounter + 1
+      - M2.columnsCounter := 1
+
+  - rule: "R' -> L'"
+    weight:
+      "L'": "lambda parent_dif: parent_dif if M2.rowCounter >= M2.row else 0"
+
+  - rule: "L' -> N , L'"
+    weight:
+      N: "lambda parent_dif: parent_dif if M2.columnsCounter <= M2.columns else 0"
+      "L'": "lambda parent_dif: parent_dif if M2.columnsCounter <= M2.columns else 0"
+    actions:
+      - M2.columnCounter := M2.columnCounter + 1
+
+  - rule: "L' -> N"
+    weight:
+      N: "lambda parent_dif: parent_dif if M2.columnsCounter == M2.columns else 0"
+    actions:
+      - M2.columnsCounter := 1
+
+  - rule: N -> lit
+    weight:
+      lit: "lambda parent_dif: parent_dif"
+
+constants:
+  preset_difficulty: 15  # 初始难度值
+  threshold: 1          # 权重阈值
+  
+functions:
+  generate_matrix_dimensions:
+    implementation: |
+      def generate_matrix_dimensions(matrix_dif):
+          """生成矩阵的行列数"""
+          row = random.randint(2, 6)
+          col = random.randint(1, int(matrix_dif - row))
+          return row, col
+
+  validate_matrix_multiplication:
+    implementation: |
+      def validate_matrix_multiplication(M1_cols, M2_rows):
+          """验证矩阵是否可以相乘"""
+          return M1_cols == M2_rows
+
+  generate_random_element:
+    implementation: |
+      def generate_random_element(difficulty):
+          """生成矩阵元素"""
+          return random.randint(-10, 10)
+
+  check_matrix_constraints:
+    implementation: |
+      def check_matrix_constraints(row_count, col_count, max_size):
+          """检查矩阵维度是否满足约束"""
+          return row_count <= max_size and col_count <= max_size
