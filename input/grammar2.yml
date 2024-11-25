@@ -50,10 +50,13 @@ syntax:
       Attribute: "lambda parent_dif: parent_dif"
 
   - rule: T -> Table
-    weight:                                                                                                                                                                                                                                                                                                                                                                                                                                        
+    weight:
       Table: "lambda parent_dif: parent_dif"
     actions:
-      # - Table.target := select_table_from_symt(symbol_table, Table.dif)
+      - current_symbols := get_current_symbols()
+      - current_symbols['Table'] + ".target" := select_table_from_symt(symbol_table, weight[current_symbols['Table']])
+      - current_symbols['Attribute'] + ".target" := select_attr_from_tab(self._get_obj_attr(current_symbols['Table'], 'target'), weight[current_symbols['Attribute']]) if self.result[1] != '*' else 'ALL'
+      - generate_table(self._get_obj_attr(current_symbols['Table'], 'target'), self._get_obj_attr(current_symbols['Attribute'], 'target'), weight[current_symbols['Table']])
 
   - rule: Z -> Z OR Y
     weight:
@@ -281,3 +284,11 @@ functions:
           if symbol_type == "table":
               return "SimpleTable"
           return None
+
+  get_current_symbols:
+    implementation: |
+      def get_current_symbols():
+          # 获取最新的符号标识符
+          current_table = f"Table_{self.symbol_counters.get('Table', 0)}"
+          current_attr = f"Attribute_{self.symbol_counters.get('Attribute', 0)}"
+          return {'Table': current_table, 'Attribute': current_attr}

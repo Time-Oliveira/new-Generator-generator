@@ -4,7 +4,6 @@ imports:
   - import statistics
   - import pandas as pd
   - import re
-  - from typing import Union, Tuple, Optional
   - import string
   - from math import *
 
@@ -15,8 +14,8 @@ syntax:
 
   - rule: E -> S F
     weight:
-      S: "lambda parent_dif: parent_dif / 4 if parent_dif > 8 else 2"
-      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 0"
+      S: "lambda parent_dif: parent_dif / 2 if parent_dif > 8 else 2"
+      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 4 else 0"
 
   - rule: S -> Select A
     weight:
@@ -25,36 +24,42 @@ syntax:
   - rule: A -> Attribute
     weight:
       Attribute: "lambda parent_dif: parent_dif"
-
-  - rule: S -> Select *
-    weight: {} # 空的weight表示这是一个终结规则
+    actions:
+      - Attribute_(index).target := select_attr_from_tab(
+          Attribute_(index-1).target if get_symbol_index('Attribute') != 0 else None,
+          T_(index-1).target if T_(index-1).target else None,
+          T_(index-1).space if isinstance(T_(index-1).space, pd.DataFrame) else None,
+          weight['Attribute_(0)'] if get_symbol_index('Attribute') == 0 else None
+        )
 
   - rule: F -> From T
     weight:
       T: "lambda parent_dif: parent_dif"
+    actions:
+      - T_(index).target := select_table(
+          Attribute_(index).target, 
+          A_(index-1).target if get_symbol_index('A') != 0 else None,
+          T_(index-1).target if get_symbol_index('T') != 0 else None
+        )
+      - T_(index).space := generate_table(
+          Attribute_(index).target, 
+          T_(index).target,
+          T_(index-1).space if get_symbol_index('T') != 0 else None,
+          weight['T_(0)'] if get_symbol_index('T') == 0 else None
+          )
 
   - rule: T -> Table
     weight:
       Table: "lambda parent_dif: parent_dif"
     actions:
-      - Table.target := select_table_from_symt(symbol_table, weight['Table'])
-      - Attribute.target := get_attribute_target(Table.target, weight, self.result)
-      - generate_table(Table.target, Attribute.target, weight['Table'])
+      - Table_(index).target := T_(index).target
 
-
-
-
-  - rule: A -> Attribute, AttributeList
+  - rule: T -> ( E ) As TableName
     weight:
-      Attribute: "lambda parent_dif: 4"
-      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 0 else 0"
-
-  - rule: AttributeList -> Attribute
-    weight:
-      Attribute: "lambda parent_dif: parent_dif"
-
-
-
+      E: "lambda parent_dif: parent_dif * 0.8"
+      TableName: "lambda parent_dif: parent_dif"
+    actions:
+      - TableName_(index).target := get_table_alias()
 
 columns:
   - name: GPA
@@ -112,208 +117,211 @@ tables:
     dif: 5
 
 constants:
-  - generator_difficult: 20  # 初始难度值
+  - generator_difficult: 30  # 初始难度值
   - threshold: 0.0     # 难度阈值
 
-custom_types:
-  - name: RandomName
-    code: |
-        class RandomName:
-            def __init__(self, min_length: int = 6, max_length: Optional[int] = None, 
-                        include_middle: bool = False, gender: Optional[str] = None):
-                self.min_length = min_length
-                self.max_length = max_length if max_length and max_length >= min_length else min_length + 20
-                self.include_middle = include_middle
-                self.gender = gender
-                
-                # 验证参数
-                if self.min_length < 6:
-                    raise ValueError("Minimum length should be at least 6 characters (3 for first name + space + 2 for last name)")
-                
-                if gender and gender.lower() not in ['male', 'female']:
-                    raise ValueError("Gender must be either 'male', 'female' or None")
-
-            def generate(self, format_type: str = 'full') -> str:
-                attempt_count = 0
-                max_attempts = 100  # 防止无限循环
-                
-                while attempt_count < max_attempts:
-                    # 生成基本名字部分
-                    gender = self.gender.lower() if self.gender else random.choice(['male', 'female'])
-                    first_name = names.get_first_name(gender=gender)
-                    middle_name = names.get_first_name(gender=gender) if self.include_middle else ''
-                    last_name = names.get_last_name()
-                    
-                    # 构建完整名字
-                    if self.include_middle:
-                        full_name = f"{first_name} {middle_name} {last_name}"
-                    else:
-                        full_name = f"{first_name} {last_name}"
-                        
-                    # 检查长度是否符合要求
-                    if self.min_length <= len(full_name) <= self.max_length:
-                        # 根据format_type返回不同格式
-                        if format_type == 'full':
-                            return full_name
-                        elif format_type == 'initials':
-                            initials = ''.join(name[0] for name in full_name.split())
-                            return initials
-                        elif format_type == 'first_last':
-                            return f"{first_name} {last_name}"
-                        elif format_type == 'formal':
-                            return f"{last_name}, {first_name}"
-                        else:
-                            raise ValueError("Invalid format_type")
-                            
-                    attempt_count += 1
-                    
-                raise RuntimeError(f"Could not generate name matching criteria after {max_attempts} attempts")
-
-            def generate_batch(self, count: int, unique: bool = True) -> list:
-                if unique and count > 1000:  # 设置一个合理的上限
-                    raise ValueError("For unique names, count should be less than 1000")
-                    
-                names_list = []
-                attempts = 0
-                max_attempts = count * 2  # 给予足够的尝试次数
-                
-                while len(names_list) < count and attempts < max_attempts:
-                    new_name = self.generate()
-                    if not unique or new_name not in names_list:
-                        names_list.append(new_name)
-                    attempts += 1
-                    
-                if len(names_list) < count:
-                    raise RuntimeError(f"Could not generate {count} unique names")
-                    
-                return names_list
-
-            @staticmethod
-            def get_name_stats(name: str) -> dict:
-                parts = name.split()
-                return {
-                    'total_length': len(name),
-                    'parts_count': len(parts),
-                    'each_part_length': [len(part) for part in parts],
-                    'has_middle_name': len(parts) > 2,
-                    'initials': ''.join(part[0] for part in parts)
-                }
-
 functions:
-  select_table_from_symt:
-    implementation: |
-      def select_table_from_symt(param1, param2):
-          table_symbols = [symbol for symbol in param1.symbols.values() if symbol['type'] == 'table']
-          matching_dif_symbols = [symbol for symbol in table_symbols if symbol['dif'] == param2]
-
-          if matching_dif_symbols:
-              return random.choice(matching_dif_symbols)['name']
-
-          closest_dif_symbols = sorted(table_symbols, key=lambda x: abs(x['dif'] - param2))
-          result = random.choice(closest_dif_symbols)['name'] if closest_dif_symbols else None
-
-          if result is None:
-              raise ValueError(f"Unable to find a table with a difficulty level close to {param2}")
-
-          return result
-
   select_attr_from_tab:
     implementation: |
-    
-        def select_attr_from_tab(param1, param2):
+        # A_(index-1).target, T_(index-1).target, T_(index-1).space, weight['Attribute_(0)']
+        def select_attr_from_tab(last_attr, last_table, parent_space, weight_value):
+            # print(f"Processing select_attr_from_tab with parent_space:\n{parent_space}")
+            
+            if not isinstance(parent_space, pd.DataFrame):
+                # 外层查询（第一层），从实体表中选择列
+                all_tables = []
+                for symbol in symbol_table.symbols.values():
+                    if symbol['type'] in ['table']:
+                        all_tables.append({
+                            'name': symbol['name'],
+                            'columns': [col.strip() for col in symbol['value'].split(',')]
+                        })
+                
+                selected_table = random.choice(all_tables)
+                difficulties = [(col, symbol_table.get_symbol(col)['dif']) 
+                              for col in selected_table['columns']]
 
-            attribute_names = [attr.strip() for attr in symbol_table.get_symbol(param1)['value'].split(',')]
+                return ", ".join([col for col, _ in random.choice([
+                    combo for r in range(1, len(difficulties) + 1) 
+                    for combo in combinations(difficulties, r) 
+                    if sum(dif for _, dif in combo) <= weight_value
+                ])])
+            else:
+                # 内层查询，需要确保生成的结果包含外层查询所需的列
+                needed_columns = list(parent_space.columns)
+                
+                # 从实体表中选择包含所需列的表
+                all_tables = []
+                for symbol in symbol_table.symbols.values():
+                    if symbol['type'] == 'table':
+                        table_columns = [col.strip() for col in symbol['value'].split(',')]
+                        if all(col in table_columns for col in needed_columns):
+                            all_tables.append({
+                                'name': symbol['name'],
+                                'columns': table_columns
+                            })
+                
+                if all_tables:
+                    selected_table = random.choice(all_tables)
+                    # 必须包含外层查询需要的列
+                    return ", ".join(needed_columns)
+            return None
 
-            matching_attributes = [
-                attr_symbol for attr_name in attribute_names 
-                if (attr_symbol := symbol_table.get_symbol(attr_name)) and attr_symbol['dif'] == param2
-            ]
-
-            if matching_attributes:
-                return random.choice(matching_attributes)['name']
-
-            closest_attributes = [
-                attr_symbol for attr_name in attribute_names 
-                if (attr_symbol := symbol_table.get_symbol(attr_name))
-            ]
-
-            return random.choice(closest_attributes)['name'] if closest_attributes else None
-
+            
+  select_table:
+    implementation: |
+      # Attribute_index.target, A_(index-1).target, T_(index-1).target 
+      def select_table(current_attr, last_attr, parent_table):
+          print(f"Processing select_table with current_attr: {current_attr}")
+          
+          current_attrs = [attr.strip() for attr in current_attr.split(',')]
+          
+          # 选择能提供所需列的表
+          for symbol in symbol_table.symbols.values():
+              if symbol['type'] == 'table':
+                  table_columns = [col.strip() for col in symbol['value'].split(',')]
+                  if all(col in table_columns for col in current_attrs):
+                      return symbol['name']
+          return None
+           
   generate_table:
-      implementation: |
-          def generate_table(Table_target, Attribute_target, Table_dif):
-              table_data = []
-
-              # 处理 SELECT * 的情况
-              if Attribute_target == "ALL":
-                  # 获取表的所有列
-                  table_symbol = symbol_table.get_symbol(Table_target)
-                  all_attributes = [attr.strip() for attr in table_symbol['value'].split(',')]
-                  
-                  for _ in range(int(Table_dif)):
-                      row = {}
-                      for attr in all_attributes:
-                          # 获取属性符号和对应的生成规则
-                          attr_symbol = symbol_table.get_symbol(attr)
-                          attr_value = attr_symbol['value']
-                          
-                          # 解析出类名和参数
-                          match = re.match(r"(\w+)\((.*)\)", attr_value)
-                          if match:
-                              class_name = match.group(1)
-                              params_str = match.group(2).strip()
-                              
-                              # 处理多个参数
-                              if params_str.startswith('[') and params_str.endswith(']'):
-                                  params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
-                              else:
-                                  params = [eval(param.strip()) for param in params_str.split(",")]
-                                  
-                              generator_class = globals().get(class_name)
-                              if not generator_class:
-                                  raise ValueError(f"Unknown generator class '{class_name}' for attribute '{attr}'.")
-
-                              # 创建生成器实例并生成数据
-                              custom_obj = generator_class(*params)
-                              row[attr] = custom_obj.generate()
-                              
-                      table_data.append(row)
-              else:
-                  # 原有的单列处理逻辑
-                  for _ in range(int(Table_dif)):
-                      row = {}
-                      attr_symbol = symbol_table.get_symbol(Attribute_target)
-                      attr_value = attr_symbol['value']
-                      
-                      match = re.match(r"(\w+)\((.*)\)", attr_value)
-                      if match:
-                          class_name = match.group(1)
-                          params_str = match.group(2).strip()
-                          
-                          if params_str.startswith('[') and params_str.endswith(']'):
-                              params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
-                          else:
-                              params = [eval(param.strip()) for param in params_str.split(",")]
-                              
-                          generator_class = globals().get(class_name)
-                          if not generator_class:
-                              raise ValueError(f"Unknown generator class '{class_name}' for attribute '{Attribute_target}'.")
-
-                          custom_obj = generator_class(*params)
-                          row[Attribute_target] = custom_obj.generate()
-
-                      table_data.append(row)
-
-              # 创建 DataFrame 并打印
-              df = pd.DataFrame(table_data)
-              print(df)
-
-  test:
     implementation: |
-      def test():
-          return 7;
+        # Attribute_index.target, T_index.target, T_(index-1).space, weight['T_(0)'] 
+        def generate_table(Attribute_target, Table_target, parent_space, Table_dif):
+            print(f"Processing generate_table for {Table_target}")
+            print(f"Attributes to select: {Attribute_target}")
+            
+            # 获取当前表的所有可能列
+            table_columns = []
+            for symbol in symbol_table.symbols.values():
+                if symbol['type'] == 'table' and symbol['name'] == Table_target:
+                    table_columns = [col.strip() for col in symbol['value'].split(',')]
+                    break
+            
+            attributes = [attr.strip() for attr in Attribute_target.split(',')]
+            
+            if isinstance(parent_space, pd.DataFrame):
+                # 内层查询：生成比父空间更丰富的数据（行和列）
+                df = pd.DataFrame()
+                num_rows = len(parent_space)
+                
+                # 确保生成的数据行数大于父空间
+                num_extra_rows = random.randint(5, 10)
+                total_rows = num_rows + num_extra_rows
+                
+                # 决定是否生成额外的列（从表的所有可能列中选择）
+                available_extra_columns = set(table_columns) - set(attributes)
+                if available_extra_columns:
+                    num_extra_cols = random.randint(1, min(3, len(available_extra_columns)))
+                    extra_columns = random.sample(list(available_extra_columns), num_extra_cols)
+                    all_columns = attributes + extra_columns
+                else:
+                    all_columns = attributes
+                    
+                print(f"Generating columns: {all_columns}")
+                
+                # 生成所有列的数据
+                for attr in all_columns:
+                    rows = []
+                    attr_symbol = symbol_table.get_symbol(attr)
+                    if not attr_symbol:
+                        continue
+                        
+                    attr_value = attr_symbol['value']
+                    match = re.match(r"(\w+)\((.*)\)", attr_value)
+                    if match:
+                        class_name = match.group(1)
+                        params_str = match.group(2).strip()
+                        
+                        if params_str.startswith('[') and params_str.endswith(']'):
+                            params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
+                        else:
+                            params = [eval(param.strip()) for param in params_str.split(",")]
+                        
+                        generator_class = globals().get(class_name)
+                        if generator_class:
+                            try:
+                                # 生成所有行的数据
+                                for _ in range(total_rows):
+                                    custom_obj = generator_class(*params)
+                                    rows.append(custom_obj.generate())
+                            except Exception as e:
+                                continue
+                                
+                    df[attr] = rows
+                
+                # 对于父空间中存在的列，确保部分行与父空间匹配
+                parent_columns = set(parent_space.columns)
+                for col in parent_columns.intersection(set(attributes)):
+                    # 随机选择一些位置，使用父空间的值
+                    match_positions = random.sample(range(total_rows), num_rows)
+                    for i, pos in enumerate(match_positions):
+                        df.loc[pos, col] = parent_space.iloc[i][col]
+                
+                # 随机打乱行的顺序
+                df = df.sample(frac=1).reset_index(drop=True)
+                
+                print(f"\nGenerated table for {Table_target} (extended from parent space):")
+                print(df)
+                return df
+            
+            else:
+                # 外层查询：也可能生成额外的列
+                df = pd.DataFrame()
+                num_rows = int(Table_dif)
+                
+                # 决定是否生成额外的列
+                available_extra_columns = set(table_columns) - set(attributes)
+                if available_extra_columns:
+                    num_extra_cols = random.randint(1, min(3, len(available_extra_columns)))
+                    extra_columns = random.sample(list(available_extra_columns), num_extra_cols)
+                    all_columns = attributes + extra_columns
+                else:
+                    all_columns = attributes
+                    
+                print(f"Generating columns: {all_columns}")
+                
+                # 生成所有列的数据
+                for attr in all_columns:
+                    rows = []
+                    attr_symbol = symbol_table.get_symbol(attr)
+                    if not attr_symbol:
+                        continue
+                        
+                    attr_value = attr_symbol['value']
+                    match = re.match(r"(\w+)\((.*)\)", attr_value)
+                    if match:
+                        class_name = match.group(1)
+                        params_str = match.group(2).strip()
+                        
+                        if params_str.startswith('[') and params_str.endswith(']'):
+                            params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
+                        else:
+                            params = [eval(param.strip()) for param in params_str.split(",")]
+                        
+                        generator_class = globals().get(class_name)
+                        if generator_class:
+                            try:
+                                for _ in range(num_rows):
+                                    custom_obj = generator_class(*params)
+                                    rows.append(custom_obj.generate())
+                            except Exception as e:
+                                continue
+                                
+                    df[attr] = rows
+                
+                print(f"\nGenerated table for {Table_target} (new data):")
+                print(df)
+                return df
+                
+            return None
 
-  get_attribute_target:
+
+  get_table_alias:
     implementation: |
-      def get_attribute_target(table_target, weight, result):
-          return 'ALL' if result[1] == '*' else select_attr_from_tab(table_target, weight['Attribute'])
+      def get_table_alias():
+          # 使用全局变量存储计数器
+          if 'table_alias_counter' not in globals():
+              globals()['table_alias_counter'] = 0
+          globals()['table_alias_counter'] += 1
+          return f"T{globals()['table_alias_counter']}"

@@ -13,6 +13,7 @@ from CustomClass import CustomClass
 from ConstantTable import ConstantTable
 from symboltable.symboltable import *
 from ConstantTable.ConstantTable import *
+# from analyzer import *
 
 def create_function_with_context(func_name: str, code: str, namespace: Dict[str, Any] = None) -> Callable:
     """
@@ -181,16 +182,25 @@ class DynamicExecutor:
         self.grammar = {}
         self.variables = {}
         self.constants = {}
-        self.functions = {}
         self.global_context = {}
         self.module_names = set()
         self.symbol_table = symbol_table
-        self.custom_types = {}  # 添加custom_types字典来存储自定义类型
+        self.custom_types = {}
+        self.functions = {
+            'get_symbol_index': self._get_current_index  # 改名为 get_symbol_index
+        }
         self.setup()
         self._init_context()
         self.error_count = 0
         self.success_count = 0
         self.result = []
+        self.current_indices = {}  # 用于跟踪每个符号的当前索引
+        self.valid_symbols = set()  # 添加有效符号集
+        self.symbol_indices = {}  # 仅用于存储 DFS 过程中的索引
+
+    def register_symbols(self, symbols: set):
+        """注册有效的符号集"""
+        self.valid_symbols.update(symbols)
 
     def _init_context(self):
         self.global_context.update(globals())
@@ -207,7 +217,7 @@ class DynamicExecutor:
                             self.global_context[attr_name] = attr_value
                             if inspect.ismodule(attr_value):
                                 self.module_names.add(attr_name)
-
+    
     def _load_custom_types(self):
         """从YAML文件中加载自定义类型定义"""
         if 'custom_types' not in self.grammar:
@@ -275,6 +285,23 @@ class DynamicExecutor:
         self.global_context.update(namespace)
         self.add_functions(external_functions)
 
+        # self.query_analyzer = NestedQueryAnalyzer(self.grammar['syntax'])
+        
+        # 获取安全性检查报告
+        # initial_weight = self.grammar['constants'][0]['generator_difficult']
+        # safety_check = self.query_analyzer.get_safety_check(initial_weight)
+        
+        # if not safety_check['is_safe']:
+        #     print(f"Warning: Current weight configuration may be unsafe")
+        #     print(f"Minimum valid weight: {safety_check['min_valid_weight']}")
+        #     print(f"Maximum safe nesting depth: {safety_check['max_safe_depth']}")
+
+    def _get_current_index(self, symbol: str) -> int:
+        """仅返回当前索引，不进行任何计数"""
+        base_symbol = symbol.split('_')[0]
+        # print("current_index is: ", self.symbol_indices.get(base_symbol, 0))
+        return self.symbol_indices.get(base_symbol, 0)
+    
     def get_custom_type(self, type_name: str):
         """获取自定义类型"""
         return self.custom_types.get(type_name)
@@ -292,15 +319,58 @@ class DynamicExecutor:
         # 更新全局上下文
         self.global_context.update(self.functions)
 
+    def _get_indexed_name(self, symbol: str) -> str:
+        """获取带索引的符号名"""
+        base_symbol = symbol.split('_')[0]
+        if '_' in symbol:
+            # 如果是 symbol_index 形式，使用当前索引
+            if symbol.endswith('_index'):
+                current_index = self.current_indices.get(base_symbol, 0)
+                return f"{base_symbol}_{current_index}"
+            # 如果已经是 symbol_x 形式，直接返回
+            return symbol
+        # 否则使用当前索引
+        current_index = self.current_indices.get(base_symbol, 0)
+        return f"{base_symbol}_{current_index}"
+
+
     def _get_obj_attr(self, obj_str: str, attr: str) -> Any:
+        """获取对象属性"""
+        # print(f"Getting attribute: {obj_str}.{attr}")
+        # print(f"Current variables: {self.variables}")
         if obj_str in self.variables:
-            return self.variables[obj_str].get(attr)
+            value = self.variables[obj_str].get(attr)
+            # print(f"Found value: {value}")
+            return value
+        # print(f"Object {obj_str} not found in variables")
         return None
 
     def _set_obj_attr(self, obj_str: str, attr: str, value: Any):
-        if obj_str not in self.variables:
-            self.variables[obj_str] = {}
-        self.variables[obj_str][attr] = value
+        """设置对象属性"""
+        # print(f"Setting attribute: {obj_str}.{attr} = {value}")
+        # print(f"Current variables before set: {self.variables}")
+        
+        # 对象名也需要经过 _prepare_expression 处理
+        modified_obj_str = self._prepare_obj_name(obj_str)
+        
+        if modified_obj_str not in self.variables:
+            self.variables[modified_obj_str] = {}
+        self.variables[modified_obj_str][attr] = value
+        # print(f"Variables after set: {self.variables}")
+
+    def _prepare_obj_name(self, obj_str: str) -> str:
+        """处理对象名中的索引"""
+        if '_(index)' in obj_str:
+            base_symbol = obj_str.split('_')[0]
+            current_index = self.symbol_indices.get(base_symbol, 0)
+            return f"{base_symbol}_{current_index}"
+        elif '_(index-' in obj_str:
+            match = re.match(r'([a-zA-Z_][a-zA-Z0-9_]*)_\(index-(\d+)\)', obj_str)
+            if match:
+                base_symbol, offset = match.groups()
+                current_index = max(0, self.symbol_indices.get(base_symbol, 0) - int(offset))
+                return f"{base_symbol}_{current_index}"
+        return obj_str
 
     def add_functions(self, new_functions: Dict[str, Callable]):
         """添加新的函数到执行环境"""
@@ -340,72 +410,95 @@ class DynamicExecutor:
                 self.module_names.add(name.split('.')[0])
 
     def _prepare_expression(self, expr: str) -> str:
-        # 先分离出字符串字面量，避免处理字符串内的点号
-        string_literals = []
-        def replace_string(match):
-            string_literals.append(match.group(0))
-            return f"__STR{len(string_literals)-1}__"
-        
-        # 保存字符串字面量
-        modified_expr = re.sub(r'"[^"]*"|\'[^\']*\'', replace_string, expr)
-        
-        # 查找所有的 xxx.yyy 模式
-        dot_pattern = r'([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)'
-        matches = re.finditer(dot_pattern, modified_expr)
-        
-        # 从后向前替换，避免干扰位置
+        # print("\nOriginal expression:", expr)
+        modified_expr = expr
         replacements = []
-        for match in matches:
-            obj_name, attr_name = match.groups()
-            # 跳过已知模块的方法调用
-            if (obj_name not in self.module_names and  # 不是已知模块
-                obj_name in self.variables):  # 是我们的动态对象
-                replacements.append((
-                    match.span(),
-                    f"self._get_obj_attr('{obj_name}', '{attr_name}')"
-                ))
-        
-        # 从后向前替换
-        for (start, end), replacement in reversed(replacements):
+
+        # 1. 处理 weight['symbol_(x)'] 格式
+        for match in re.finditer(r"weight\['([a-zA-Z_][a-zA-Z0-9_]*)_\((\d+)\)'\]", modified_expr):
+            symbol, index = match.groups()
+            if symbol in self.valid_symbols:
+                new_expr = f"weight['{symbol}_{index}']"
+                replacements.append((match.span(), new_expr))
+                # print(f"Weight replacement: {match.group(0)} -> {new_expr}")
+
+        # 应用权重替换
+        for (start, end), replacement in sorted(replacements, reverse=True):
             modified_expr = modified_expr[:start] + replacement + modified_expr[end:]
         
-        # 恢复字符串字面量
-        for i, literal in enumerate(string_literals):
-            modified_expr = modified_expr.replace(f"__STR{i}__", literal)
-            
-        return modified_expr
+        replacements.clear()
+        # print("After weight replacements:", modified_expr)
 
-    def execute(self, expr: str):
+        # 2. 处理所有索引表达式
+        patterns = [
+            # symbol_(index-x) 格式
+            (r'([a-zA-Z_][a-zA-Z0-9_]*)_\(index-(\d+)\)', 
+            lambda m: f"{m.group(1)}_{max(0, self.symbol_indices.get(m.group(1), 0) - int(m.group(2)))}"),
+            
+            # symbol_(index) 格式
+            (r'([a-zA-Z_][a-zA-Z0-9_]*)_\(index\)', 
+            lambda m: f"{m.group(1)}_{self.symbol_indices.get(m.group(1), 0)}"),
+            
+            # symbol_(x) 格式
+            (r'([a-zA-Z_][a-zA-Z0-9_]*)_\((\d+)\)', 
+            lambda m: f"{m.group(1)}_{m.group(2)}")
+        ]
+
+        for pattern, replacement_func in patterns:
+            matches = list(re.finditer(pattern, modified_expr))
+            for match in matches:
+                old_expr = match.group(0)
+                new_expr = replacement_func(match)
+                replacements.append((match.span(), new_expr))
+                # print(f"Index replacement: {old_expr} -> {new_expr}")
+
+        # 应用所有替换
+        for (start, end), replacement in sorted(replacements, reverse=True):
+            modified_expr = modified_expr[:start] + replacement + modified_expr[end:]
+        
+        # print("After index replacements:", modified_expr)
+
+        modified_expr = re.sub(
+            r'([a-zA-Z_][a-zA-Z0-9_]*_[0-9]+)\.([a-zA-Z_][a-zA-Z0-9_]*)',
+            lambda m: f"self._get_obj_attr('{self._prepare_obj_name(m.group(1))}', '{m.group(2)}')",
+            modified_expr
+        )
+        
+        return modified_expr
+    
+    def execute(self, expr: str, weight_map=None):
         try:
             exec_locals = {}
             exec_locals.update(self.variables)
-            # 获取当前规则的权重值
-            calculated_weights = {
-                name: attrs.get('dif', 0) 
-                for name, attrs in self.variables.items()
-                if 'dif' in attrs
-            }
-            # 在执行环境中包含常量、函数和动态变量
+            
+            if weight_map is None:
+                weight_map = {}
+                
             exec_globals = {
                 'self': self,
-                'weight': calculated_weights,  # 添加weight字典
+                'weight': weight_map,
                 **self.global_context,
                 **self.constants,
                 **self.functions
             }
             
             modified_expr = self._prepare_expression(expr)
+            # print("\nExecuting expression:", modified_expr)
+            # print("Current variables:", self.variables)
+            # print("Current weight_map:", weight_map)
+            
             result = eval(modified_expr, exec_globals, exec_locals)
+            # print("Expression result:", result)
             self.success_count += 1
             return result
-                
+            
         except Exception as e:
             self.error_count += 1
-            # 在错误信息中包含所有上下文信息
             context = {
                 **self.variables,
                 'constants': self.constants,
-                'functions': {name: f"<function {name}>" for name in self.functions}
+                'functions': {name: f"<function {name}>" for name in self.functions},
+                'weight': weight_map
             }
             raise StatementExecutionError(
                 statement=expr,

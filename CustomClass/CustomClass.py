@@ -1,7 +1,88 @@
 import random
 import string
 import re
+import names
+from typing import Union, Tuple, Optional
+class RandomName:
+    def __init__(self, min_length: int = 6, max_length: Optional[int] = None, 
+                 include_middle: bool = False, gender: Optional[str] = None):
+        self.min_length = min_length
+        self.max_length = max_length if max_length and max_length >= min_length else min_length + 20
+        self.include_middle = include_middle
+        self.gender = gender
+        
+        # 验证参数
+        if self.min_length < 6:
+            raise ValueError("Minimum length should be at least 6 characters (3 for first name + space + 2 for last name)")
+        
+        if gender and gender.lower() not in ['male', 'female']:
+            raise ValueError("Gender must be either 'male', 'female' or None")
 
+    def generate(self, format_type: str = 'full') -> str:
+        attempt_count = 0
+        max_attempts = 100  # 防止无限循环
+        
+        while attempt_count < max_attempts:
+            # 生成基本名字部分
+            gender = self.gender.lower() if self.gender else random.choice(['male', 'female'])
+            first_name = names.get_first_name(gender=gender)
+            middle_name = names.get_first_name(gender=gender) if self.include_middle else ''
+            last_name = names.get_last_name()
+            
+            # 构建完整名字
+            if self.include_middle:
+                full_name = f"{first_name} {middle_name} {last_name}"
+            else:
+                full_name = f"{first_name} {last_name}"
+                
+            # 检查长度是否符合要求
+            if self.min_length <= len(full_name) <= self.max_length:
+                # 根据format_type返回不同格式
+                if format_type == 'full':
+                    return full_name
+                elif format_type == 'initials':
+                    initials = ''.join(name[0] for name in full_name.split())
+                    return initials
+                elif format_type == 'first_last':
+                    return f"{first_name} {last_name}"
+                elif format_type == 'formal':
+                    return f"{last_name}, {first_name}"
+                else:
+                    raise ValueError("Invalid format_type")
+                    
+            attempt_count += 1
+            
+        raise RuntimeError(f"Could not generate name matching criteria after {max_attempts} attempts")
+
+    def generate_batch(self, count: int, unique: bool = True) -> list:
+        if unique and count > 1000:  # 设置一个合理的上限
+            raise ValueError("For unique names, count should be less than 1000")
+            
+        names_list = []
+        attempts = 0
+        max_attempts = count * 2  # 给予足够的尝试次数
+        
+        while len(names_list) < count and attempts < max_attempts:
+            new_name = self.generate()
+            if not unique or new_name not in names_list:
+                names_list.append(new_name)
+            attempts += 1
+            
+        if len(names_list) < count:
+            raise RuntimeError(f"Could not generate {count} unique names")
+            
+        return names_list
+
+    @staticmethod
+    def get_name_stats(name: str) -> dict:
+        parts = name.split()
+        return {
+            'total_length': len(name),
+            'parts_count': len(parts),
+            'each_part_length': [len(part) for part in parts],
+            'has_middle_name': len(parts) > 2,
+            'initials': ''.join(part[0] for part in parts)
+        }        
 class CustomID:
     def __init__(self, pattern):
         self.pattern = pattern

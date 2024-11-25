@@ -17,12 +17,16 @@ def analyze_syntax(syntax_rules):
         left_side = left_side.strip()
         right_side = right_side.strip().split()
 
-        left_symbols.add(left_side)
-        right_symbols.update(right_side)
+        # 去除已有的索引，获取基础符号名
+        base_left = left_side.split('_')[0]
+        base_right = [sym.split('_')[0] for sym in right_side]
 
-        # 添加规则和对应的动作到映射表
+        left_symbols.add(base_left)
+        right_symbols.update(base_right)
+
+        # 使用原始带索引的符号名存储规则
         rule_entry = {
-            "rule": rule_str,  # 保存完整的规则字符串
+            "rule": rule_str,
             "rules": right_side,
             "actions": rule.get("actions", []),
             "weight": rule.get("weight", {})
@@ -33,18 +37,15 @@ def analyze_syntax(syntax_rules):
     nonterminals = left_symbols
     return nonterminals, terminals, rule_map, left_symbols, right_symbols
 
-"""自动判断start_symbol: 选择出现在左侧但从未出现在右侧的符号"""
 def get_start_symbol(left_symbols, right_symbols):
-
-    # 起点符号应是没有在右侧出现的左侧符号
+    # 获取出现在左侧但从未出现在右侧的基础符号
     start_candidates = left_symbols - right_symbols
-
     if start_candidates:
-        # 如果start_symbol有多个，返回任意一个候选符号
-        return next(iter(start_candidates))
+        start_symbol = next(iter(start_candidates))
+        return start_symbol  # 返回基础符号名，不带索引
     else:
         raise ValueError("无法找到有效的起点符号，所有左侧符号都出现在右侧。")
-
+    
 """处理语法文件加载和动态导入的类"""
 class GrammarLoader:
     def __init__(self):
