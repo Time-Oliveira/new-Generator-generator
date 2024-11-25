@@ -1,21 +1,27 @@
 imports:
   - import random
-  - import numpy as np
-
 syntax:
   - rule: E -> M1 * M2
     weight:
       M1: "lambda parent_dif: (parent_dif - 6) / 2"
       M2: "lambda parent_dif, M1: M1"
     actions:
+      - E.dif := parent_dif  # 假设预设难度就是父节点传入的难度值，这里设置E的难度
+      - M1.dif := (parent_dif - 6) / 2
+      - M2.dif := M1.dif
+      - M1.row := rand(2, 6)  # 使用rand函数生成2到6的整数作为M1的行数，这里假设rand函数按此规则使用，后续可能需调整
+      - M2.column := M1.row
+      - M1.column := rand(1, M1.dif - M1.column)
+      - M2.row := rand(1, M2.dif - M2.row)
       - E.row := M1.row
-      - E.column := M2.column
-      - M2.row := M1.column
+      - E.column := M2.column  # 这里补上E.column的赋值，假设就是取M2的列数
 
   - rule: M1 -> [ R ]
     weight:
       R: "lambda parent_dif: parent_dif"
     actions:
+      - M1.dif := parent_dif
+      - R.dif := M1.dif
       - M1.rowsCounter := 1
 
   - rule: R -> L ; R
@@ -25,28 +31,46 @@ syntax:
     actions:
       - M1.rowsCounter := M1.rowsCounter + 1
       - M1.columnsCounter := 1
+      - if M1.rowCounter > M1.row:  # 这里添加类似控制逻辑，不过具体怎么处理回溯等后续可能需要完善更多代码逻辑
+          return False
 
   - rule: R -> L
     weight:
       L: "lambda parent_dif: parent_dif if M1.rowCounter >= M1.row else 0"
+    actions:
+      - if M1.rowCounter < M1.row:
+          return False
 
-  - rule: L -> N , L
+  - rule: L -> N, L
     weight:
       N: "lambda parent_dif: parent_dif if M1.columnsCounter <= M1.columns else 0"
       L: "lambda parent_dif: parent_dif if M1.columnsCounter <= M1.columns else 0"
     actions:
       - M1.columnCounter := M1.columnCounter + 1
+      - if M1.columnsCounter > M1.columns:
+          return False
 
   - rule: L -> N
     weight:
       N: "lambda parent_dif: parent_dif if M1.columnsCounter == M1.columns else 0"
     actions:
-      - M1.columnsCounter := 1
+      - if M1.columnsCounter == 0:
+          M1.columnsCounter := 1
+      - elif M1.columnCounter < M1.columns:
+          return False
+
+  - rule: N -> lit
+    weight:
+      lit: "lambda parent_dif: parent_dif"
+    actions:
+      # 这里可以按需添加对N生成lit相关的动作，目前不太明确lit具体情况，暂空着
 
   - rule: M2 -> [ R' ]
     weight:
       "R'": "lambda parent_dif: parent_dif"
     actions:
+      - M2.dif := parent_dif
+      - "R'.dif" := M2.dif
       - M2.rowsCounter := 1
 
   - rule: "R' -> L' ; R'"
@@ -56,55 +80,44 @@ syntax:
     actions:
       - M2.rowsCounter := M2.rowsCounter + 1
       - M2.columnsCounter := 1
+      - if M2.rowCounter > M2.row:
+          return False
 
   - rule: "R' -> L'"
     weight:
       "L'": "lambda parent_dif: parent_dif if M2.rowCounter >= M2.row else 0"
+    actions:
+      - if M2.rowCounter < M2.row:
+          return False
 
-  - rule: "L' -> N , L'"
+  - rule: "L' -> N, L'"
     weight:
       N: "lambda parent_dif: parent_dif if M2.columnsCounter <= M2.columns else 0"
       "L'": "lambda parent_dif: parent_dif if M2.columnsCounter <= M2.columns else 0"
     actions:
       - M2.columnCounter := M2.columnCounter + 1
+      - if M2.columnsCounter > M2.columns:
+          return False
 
   - rule: "L' -> N"
     weight:
       N: "lambda parent_dif: parent_dif if M2.columnsCounter == M2.columns else 0"
     actions:
-      - M2.columnsCounter := 1
+      - if M2.columnsCounter == 0:
+          M2.columnsCounter := 1
+      - elif M2.columnCounter < M2.columns:
+          return False
 
-  - rule: N -> lit
-    weight:
-      lit: "lambda parent_dif: parent_dif"
+symbol_tables:
 
 constants:
   preset_difficulty: 15  # 初始难度值
   threshold: 1          # 权重阈值
-  
+
+
+
 functions:
-  generate_matrix_dimensions:
+  rand:
     implementation: |
-      def generate_matrix_dimensions(matrix_dif):
-          """生成矩阵的行列数"""
-          row = random.randint(2, 6)
-          col = random.randint(1, int(matrix_dif - row))
-          return row, col
-
-  validate_matrix_multiplication:
-    implementation: |
-      def validate_matrix_multiplication(M1_cols, M2_rows):
-          """验证矩阵是否可以相乘"""
-          return M1_cols == M2_rows
-
-  generate_random_element:
-    implementation: |
-      def generate_random_element(difficulty):
-          """生成矩阵元素"""
-          return random.randint(-10, 10)
-
-  check_matrix_constraints:
-    implementation: |
-      def check_matrix_constraints(row_count, col_count, max_size):
-          """检查矩阵维度是否满足约束"""
-          return row_count <= max_size and col_count <= max_size
+      def rand(min_val, max_val):
+          return random.randint(min_val, max_val)
