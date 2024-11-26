@@ -466,6 +466,34 @@ class DynamicExecutor:
         
         return modified_expr
     
+    def evaluate_condition(self, condition_expr: str, weight_map: dict) -> bool:
+        """评估规则的条件表达式"""
+        print(f"\nEvaluating condition: {condition_expr}")
+        print(f"With weights: {weight_map}")
+        
+        try:
+            # 创建评估环境
+            eval_globals = {
+                'self': self,
+                'w': weight_map,  # 使用 w 作为 weight_map 的简写
+                **self.global_context,
+                **self.constants,
+                **self.functions
+            }
+            
+            # 处理condition表达式
+            modified_expr = self._prepare_expression(condition_expr)
+            print(f"Prepared condition: {modified_expr}")
+            
+            # 评估条件
+            result = eval(modified_expr, eval_globals)
+            print(f"Condition result: {result}")
+            return bool(result)
+            
+        except Exception as e:
+            print(f"Error in condition evaluation: {str(e)}")
+            return False
+        
     def execute(self, expr: str, weight_map=None):
         try:
             exec_locals = {}

@@ -10,12 +10,12 @@ imports:
 syntax:
   - rule: L -> E
     weight:
-      E: "lambda parent_dif: generator_difficult"
+      E: "lambda parent_dif: general_difficult"
 
   - rule: E -> S F
     weight:
-      S: "lambda parent_dif: parent_dif / 2 if parent_dif > 8 else 2"
-      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 4 else 0"
+      S: "lambda parent_dif: 0.4 * parent_dif"  # 固定比例分配
+      F: "lambda parent_dif: 0.6 * parent_dif"
 
   - rule: S -> Select A
     weight:
@@ -51,13 +51,15 @@ syntax:
   - rule: T -> Table
     weight:
       Table: "lambda parent_dif: parent_dif"
+    condition: "[0, 10.8]"  # 18一层，10.8两层， 6.48三层
     actions:
       - Table_(index).target := T_(index).target
 
   - rule: T -> ( E ) As TableName
     weight:
-      E: "lambda parent_dif: parent_dif * 0.8"
+      E: "lambda parent_dif: parent_dif"
       TableName: "lambda parent_dif: parent_dif"
+    condition: "(10.8, ~)" # 18一层，10.8两层， 6.48三层
     actions:
       - TableName_(index).target := get_table_alias()
 
@@ -117,8 +119,8 @@ tables:
     dif: 5
 
 constants:
-  - generator_difficult: 30  # 初始难度值
-  - threshold: 0.0     # 难度阈值
+  - general_difficult: 30  # 示例：期望2层嵌套
+  - threshold: 0.0    # 防止过深嵌套
 
 functions:
   select_attr_from_tab:

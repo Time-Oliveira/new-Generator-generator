@@ -1,294 +1,72 @@
 imports:
-  - import math
   - import random
   - import numpy as np
-  - from math import log, sqrt, exp
 
 syntax:
   - rule: L -> E
     weight:
-      E: "lambda parent_dif: generator_difficult"
+      E: "lambda parent_dif: general_difficult"
 
-  - rule: E -> S F
+  - rule: E -> M1 * M2
     weight:
-      S: "lambda parent_dif: parent_dif - 5 if parent_dif > 10 else 5"
-      F: "lambda parent_dif, S: parent_dif - S if parent_dif - S > 5 else 5"
+      M1: "lambda parent_dif: parent_dif / 2"
+      M2: "lambda parent_dif: parent_dif / 2"
     actions:
+      - E_(index).leftrow := rand(1, 6)  # 生成整数
+      - E_(index).leftcolumn := rand(1, 6)
+      - E_(index).rightrow := E_(index).leftcolumn  # 直接使用整数值
+      - E_(index).rightcolumn := rand(1, 6)
 
-  - rule: E -> S F W
+  - rule: E -> M1 + M2
     weight:
-      S: "lambda parent_dif: parent_dif - 8 if parent_dif > 12 else 4"
-      F: "lambda parent_dif: parent_dif - 6 if parent_dif > 10 else 4"
-      W: "lambda parent_dif, S, F: parent_dif - S - F if parent_dif - S - F > 4 else 4"
-
-  - rule: S -> Select A
-    weight:
-      A: "lambda parent_dif: parent_dif"
-
-  - rule: S -> Select *
-    weight: {}
-
-  - rule: F -> From T
-    weight:
-      T: "lambda parent_dif: parent_dif"
-
-  - rule: W -> Where Z
-    weight:
-      Z: "lambda parent_dif: parent_dif"
-
-  - rule: A -> Attribute
-    weight:
-      Attribute: "lambda parent_dif: parent_dif"
-
-  - rule: A -> Attribute, AttributeList
-    weight:
-      Attribute: "lambda parent_dif: 4"
-      AttributeList: "lambda parent_dif: parent_dif - 2 if parent_dif > 6 else 4"
-
-  - rule: AttributeList -> Attribute
-    weight:
-      Attribute: "lambda parent_dif: parent_dif"
-
-  - rule: T -> Table
-    weight:
-      Table: "lambda parent_dif: parent_dif"
+      M1: "lambda parent_dif: parent_dif / 2"
+      M2: "lambda parent_dif: parent_dif / 2"
     actions:
-      - current_symbols := get_current_symbols()
-      - current_symbols['Table'] + ".target" := select_table_from_symt(symbol_table, weight[current_symbols['Table']])
-      - current_symbols['Attribute'] + ".target" := select_attr_from_tab(self._get_obj_attr(current_symbols['Table'], 'target'), weight[current_symbols['Attribute']]) if self.result[1] != '*' else 'ALL'
-      - generate_table(self._get_obj_attr(current_symbols['Table'], 'target'), self._get_obj_attr(current_symbols['Attribute'], 'target'), weight[current_symbols['Table']])
+      - E_(index).leftrow := rand(1, 6)
+      - E_(index).leftcolumn := rand(1, 6)
+      - E_(index).rightrow := E_(index).leftrow
+      - E_(index).rightcolumn := E_(index).leftcolumn
 
-  - rule: Z -> Z OR Y
+  - rule: M1 -> ( E )
     weight:
-      Z: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else parent_dif // 2"  # 使用整除确保递减
-      Y: "lambda parent_dif: 4 if parent_dif > 8 else parent_dif // 2"
+      E: "lambda parent_dif: 0.75 * parent_dif"  # 修改权重计算
+    condition: "(15, ~]"
+    actions:
+      - M1_(index).target := generate_matrix(E_(index).leftrow, E_(index).leftcolumn)
 
-  - rule: Z -> Y
+  - rule: M2 -> ( E )
     weight:
-      Y: "lambda parent_dif: parent_dif"
+      E: "lambda parent_dif: 0.75 * parent_dif"  # 修改权重计算
+    condition: "(15, ~]"
+    actions:
+      - M2_(index).target := generate_matrix(E_(index).rightrow, E_(index).rightcolumn)
 
-  - rule: Y -> Y AND C
+  - rule: M1 -> Matrix
     weight:
-      Y: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else parent_dif // 2"
-      C: "lambda parent_dif: 4 if parent_dif > 8 else parent_dif // 2"
+      Matrix: "lambda parent_dif: parent_dif"
+    condition: "[0, 15]"
+    actions:
+      - Matrix_(index).target := generate_matrix(E_(index).leftrow, E_(index).leftcolumn)
 
-  - rule: Y -> C
+  - rule: M2 -> Matrix
     weight:
-      C: "lambda parent_dif: parent_dif"
-
-  - rule: C -> NOT C
-    weight:
-      C: "lambda parent_dif: parent_dif"
-
-  - rule: C -> P
-    weight:
-      P: "lambda parent_dif: parent_dif"
-
-  - rule: P -> Attribute O Value
-    weight:
-      Attribute: "lambda parent_dif: parent_dif - 4 if parent_dif > 8 else 4"
-      O: "lambda parent_dif: 4"
-      Value: "lambda parent_dif: 2"
-
-  - rule: P -> Attribute O Attribute
-    weight:
-      Attribute1: "lambda parent_dif: parent_dif - 6 if parent_dif > 10 else 4"
-      O: "lambda parent_dif: 4"
-      Attribute2: "lambda parent_dif: 4"
-
-  - rule: P -> Attribute = Attribute
-    weight:
-      Attribute1: "lambda parent_dif: parent_dif - 2 if parent_dif > 4 else 2"
-      Attribute2: "lambda parent_dif: parent_dif - 2 if parent_dif > 4 else 2"
-
-# 定义属性部分
-columns:
-  - name: GPA
-    type: LimitedFloat
-    params: [1, 1.0, 4.0]
-    dif: 2
-
-  - name: Major
-    type: CustomString
-    params: [20]
-    dif: 2
-
-  - name: Location
-    type: CustomString
-    params: [20]
-    dif: 2
-
-  - name: ID
-    type: CustomInt
-    params: [1000, 9999]
-    dif: 2
-
-  - name: Age
-    type: CustomInt
-    params: [18, 25]
-    dif: 2
-
-  - name: Name
-    type: CustomString
-    params: [10]
-    dif: 2
-
-  - name: Unit
-    type: UnitFloat
-    params: [1.0, 2.0, 3.0, 4.0]
-    dif: 2
-
-  - name: Classroom
-    type: CustomString
-    params: [5]
-    dif: 2
-
-  # 新增属性部分
-  - name: Subject
-    type: CustomString
-    params: [20]
-    dif: 3
-
-  - name: Salary
-    type: LimitedFloat
-    params: [3000, 5000, 10000]
-    dif: 4
-
-  - name: Experience
-    type: CustomInt
-    params: [1, 10]
-    dif: 3
-
-  - name: Department
-    type: CustomString
-    params: [15]
-    dif: 3
-
-
-# 定义表格部分
-tables:
-  - name: Course
-    columns: [ID, Name, Unit, Classroom]
-    dif: 10
-
-  - name: Student
-    columns: [ID, GPA, Age]
-    dif: 7
-
-  - name: School
-    columns: [Major, Location]
-    dif: 5
-
-  # 新增表格：Teacher
-  - name: Teacher
-    columns: [Name, Subject, Salary, Experience, Department]
-    dif: 6
+      Matrix: "lambda parent_dif: parent_dif"
+    condition: "[0, 15]"
+    actions:
+      - Matrix_(index).target := generate_matrix(E_(index).rightrow, E_(index).rightcolumn)
 
 constants:
-  - generator_difficult: 20  # 初始难度值
-  - threshold: 0.0     # 难度阈值
+  - general_difficult: 30  # 初始难度值
+  - threshold: 0.0        # 权重阈值
 
 functions:
-  select_table_from_symt:
+  rand:
     implementation: |
-      def select_table_from_symt(param1, param2):
-          table_symbols = [symbol for symbol in param1.symbols.values() if symbol['type'] == 'table']
-          matching_dif_symbols = [symbol for symbol in table_symbols if symbol['dif'] == param2]
+      def rand(min_val, max_val):
+          """生成指定范围内的随机整数"""
+          return random.randint(min_val, max_val)
 
-          if matching_dif_symbols:
-              return random.choice(matching_dif_symbols)['name']
-
-          closest_dif_symbols = sorted(table_symbols, key=lambda x: abs(x['dif'] - param2))
-          result = random.choice(closest_dif_symbols)['name'] if closest_dif_symbols else None
-
-          if result is None:
-              raise ValueError(f"Unable to find a table with a difficulty level close to {param2}")
-
-          return result
-
-  select_table_from_symt:
+  generate_matrix:
     implementation: |
-        def select_attr_from_tab(param1, param2):
-
-            attribute_names = [attr.strip() for attr in symbol_table.get_symbol(param1)['value'].split(',')]
-
-            matching_attributes = [
-                attr_symbol for attr_name in attribute_names 
-                if (attr_symbol := symbol_table.get_symbol(attr_name)) and attr_symbol['dif'] == param2
-            ]
-
-            if matching_attributes:
-                return random.choice(matching_attributes)['name']
-
-            closest_attributes = [
-                attr_symbol for attr_name in attribute_names 
-                if (attr_symbol := symbol_table.get_symbol(attr_name))
-            ]
-
-            return random.choice(closest_attributes)['name'] if closest_attributes else None
-
-  generate_table:
-    implementation: |
-        def generate_table(Table_target, Attribute_target, Table_dif):
-            table_data = []
-
-            for _ in range(int(Table_dif)):
-                row = {}
-
-                # 获取属性符号和对应的生成规则
-                attr_symbol = symbol_table.get_symbol(Attribute_target)
-                attr_value = attr_symbol['value']
-                
-                # 解析出类名和参数
-                match = re.match(r"(\w+)\((.*)\)", attr_value)
-                if match:
-                    class_name = match.group(1)
-                    params_str = match.group(2).strip()
-                    
-                    # 处理多个参数，确保这些参数作为字面值（字符串）
-                    # 如果是列表，直接转换为 list
-                    if params_str.startswith('[') and params_str.endswith(']'):
-                        params = [item.strip().strip("'") for item in params_str[1:-1].split(",")]
-                    else:
-                        params = [eval(param.strip()) for param in params_str.split(",")]
-                else:
-                    raise ValueError(f"Invalid format for {Attribute_target}: {attr_value}")
-                
-                generator_class = globals().get(class_name)
-                if not generator_class:
-                    raise ValueError(f"Unknown generator class '{class_name}' for attribute '{Attribute_target}'.")
-
-                # 创建生成器实例并生成数据
-                custom_obj = generator_class(*params)
-                row[Attribute_target] = custom_obj.generate()
-
-                table_data.append(row)
-
-            # 创建 DataFrame 并打印
-            df = pd.DataFrame(table_data)
-            print(df)
-
-  check_difficulty:
-    implementation: |
-      def check_difficulty(current_dif):
-          """检查当前难度值是否允许继续展开"""
-          if current_dif is None:
-              return True
-          return float(current_dif) > 1.0  # 设置最小难度阈值为1.0
-
-  # 添加获取简单规则的函数
-  get_simple_value:
-    implementation: |
-      def get_simple_value(symbol_type):
-          """当难度值过低时返回简单值"""
-          if symbol_type == "table":
-              return "SimpleTable"
-          return None
-
-  get_current_symbols:
-    implementation: |
-      def get_current_symbols():
-          # 获取最新的符号标识符
-          current_table = f"Table_{self.symbol_counters.get('Table', 0)}"
-          current_attr = f"Attribute_{self.symbol_counters.get('Attribute', 0)}"
-          return {'Table': current_table, 'Attribute': current_attr}
+      def generate_matrix(row, col):
+          return np.mat(np.random.randint(0, 10, size=(row, col)))

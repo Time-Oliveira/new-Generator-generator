@@ -29,6 +29,7 @@ def analyze_syntax(syntax_rules):
             "rule": rule_str,
             "rules": right_side,
             "actions": rule.get("actions", []),
+            "condition": rule.get("condition", []),
             "weight": rule.get("weight", {})
         }
         rule_map.setdefault(left_side, []).append(rule_entry)
