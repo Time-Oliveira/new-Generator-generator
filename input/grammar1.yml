@@ -174,7 +174,7 @@ functions:
     implementation: |
       # Attribute_index.target, A_(index-1).target, T_(index-1).target 
       def select_table(current_attr, last_attr, parent_table):
-          print(f"Processing select_table with current_attr: {current_attr}")
+          # print(f"Processing select_table with current_attr: {current_attr}")
           
           current_attrs = [attr.strip() for attr in current_attr.split(',')]
           
@@ -190,8 +190,8 @@ functions:
     implementation: |
         # Attribute_index.target, T_index.target, T_(index-1).space, weight['T_(0)'] 
         def generate_table(Attribute_target, Table_target, parent_space, Table_dif):
-            print(f"Processing generate_table for {Table_target}")
-            print(f"Attributes to select: {Attribute_target}")
+            # print(f"Processing generate_table for {Table_target}")
+            # print(f"Attributes to select: {Attribute_target}")
             
             # 获取当前表的所有可能列
             table_columns = []
@@ -220,7 +220,7 @@ functions:
                 else:
                     all_columns = attributes
                     
-                print(f"Generating columns: {all_columns}")
+                # print(f"Generating columns: {all_columns}")
                 
                 # 生成所有列的数据
                 for attr in all_columns:
@@ -263,8 +263,9 @@ functions:
                 # 随机打乱行的顺序
                 df = df.sample(frac=1).reset_index(drop=True)
                 
-                print(f"\nGenerated table for {Table_target} (extended from parent space):")
+                # print(f"\nGenerated table for {Table_target} (extended from parent space):")
                 print(df)
+                print()
                 return df
             
             else:
@@ -281,7 +282,7 @@ functions:
                 else:
                     all_columns = attributes
                     
-                print(f"Generating columns: {all_columns}")
+                # print(f"Generating columns: {all_columns}")
                 
                 # 生成所有列的数据
                 for attr in all_columns:
@@ -312,8 +313,9 @@ functions:
                                 
                     df[attr] = rows
                 
-                print(f"\nGenerated table for {Table_target} (new data):")
+                # print(f"\nGenerated table for {Table_target} (new data):")
                 print(df)
+                print()
                 return df
                 
             return None

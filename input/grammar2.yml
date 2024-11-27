@@ -12,51 +12,86 @@ syntax:
       M1: "lambda parent_dif: parent_dif / 2"
       M2: "lambda parent_dif: parent_dif / 2"
     actions:
-      - E_(index).leftrow := rand(1, 6)  # 生成整数
-      - E_(index).leftcolumn := rand(1, 6)
-      - E_(index).rightrow := E_(index).leftcolumn  # 直接使用整数值
-      - E_(index).rightcolumn := rand(1, 6)
+      - E_(index).leftrow := rand(1, 6) if get_symbol_index('E') == 0 else None
+      - E_(index).leftcolumn := rand(1, 6) if get_symbol_index('E') == 0 else None
+      - E_(index).rightrow := E_(index).leftcolumn
+      - E_(index).rightcolumn := rand(1, 6) if get_symbol_index('E') == 0 else None
+      - E_(index).leftM := generate_mul_matrix(
+          E_(index).leftrow if get_symbol_index('E') == 0 else None,
+          E_(index).leftcolumn if get_symbol_index('E') == 0 else None,
+          E_(index).space if get_symbol_index('E') != 0 else None
+        )
+      - E_(index).rightM := generate_mul_matrix(
+          E_(index).rightrow if get_symbol_index('E') == 0 else None,
+          E_(index).rightcolumn if get_symbol_index('E') == 0 else None, 
+          E_(index).space if get_symbol_index('E') != 0 else None,
+          E_(index).leftM if get_symbol_index('E') != 0 else None
+        )
+      - M1_(index).target := E_(index).leftM
+      - M2_(index).target := E_(index).rightM 
+    
 
   - rule: E -> M1 + M2
     weight:
       M1: "lambda parent_dif: parent_dif / 2"
       M2: "lambda parent_dif: parent_dif / 2"
     actions:
-      - E_(index).leftrow := rand(1, 6)
-      - E_(index).leftcolumn := rand(1, 6)
+      - E_(index).leftrow := rand(1, 6) if get_symbol_index('E') == 0 else None
+      - E_(index).leftcolumn := rand(1, 6) if get_symbol_index('E') == 0 else None
       - E_(index).rightrow := E_(index).leftrow
       - E_(index).rightcolumn := E_(index).leftcolumn
+      - E_(index).leftM := generate_add_matrix(
+          E_(index).leftrow if get_symbol_index('E') == 0 else None,
+          E_(index).leftcolumn if get_symbol_index('E') == 0 else None, 
+          E_(index).space if get_symbol_index('E') != 0 else None
+        )
+      - E_(index).rightM := generate_add_matrix(
+          E_(index).rightrow if get_symbol_index('E') == 0 else None,
+          E_(index).rightcolumn if get_symbol_index('E') == 0 else None, 
+          E_(index).space if get_symbol_index('E') != 0 else None,
+          E_(index).leftM if get_symbol_index('E') != 0 else None
+        )
+      - M1_(index).target := E_(index).leftM
+      - M2_(index).target := E_(index).rightM    
 
   - rule: M1 -> ( E )
     weight:
-      E: "lambda parent_dif: 0.75 * parent_dif"  # 修改权重计算
+      E: "lambda parent_dif: parent_dif"  # 修改权重计算
     condition: "(15, ~]"
     actions:
-      - M1_(index).target := generate_matrix(E_(index).leftrow, E_(index).leftcolumn)
+      # - M1_(index).target := generate_matrix(E_(index).leftrow, E_(index).leftcolumn, E_(index).space)
+      # - E_(index).space := M1_(index).target
+      # - M1_(index).target := E_(index).leftM
+      - E_(index).space := M1_(index).target
 
   - rule: M2 -> ( E )
     weight:
-      E: "lambda parent_dif: 0.75 * parent_dif"  # 修改权重计算
+      E: "lambda parent_dif: parent_dif"  # 修改权重计算
     condition: "(15, ~]"
     actions:
-      - M2_(index).target := generate_matrix(E_(index).rightrow, E_(index).rightcolumn)
+      # - M2_(index).target := generate_matrix(E_(index).rightrow, E_(index).rightcolumn, E_(index).space)
+      # - E_(index).space := M2_(index).target
+      # - M2_(index).target := E_(index).rightM
+      - E_(index).space := M2_(index).target
 
   - rule: M1 -> Matrix
     weight:
       Matrix: "lambda parent_dif: parent_dif"
     condition: "[0, 15]"
     actions:
-      - Matrix_(index).target := generate_matrix(E_(index).leftrow, E_(index).leftcolumn)
+      # - Matrix_(index).target := generate_matrix(E_(index).leftrow, E_(index).leftcolumn, E_(index).space)
+      - Matrix_(index).target := M1_(index).target
 
   - rule: M2 -> Matrix
     weight:
       Matrix: "lambda parent_dif: parent_dif"
     condition: "[0, 15]"
     actions:
-      - Matrix_(index).target := generate_matrix(E_(index).rightrow, E_(index).rightcolumn)
+      # - Matrix_(index).target := generate_matrix(E_(index).rightrow, E_(index).rightcolumn, E_(index).space)
+      - Matrix_(index).target := M2_(index).target
 
 constants:
-  - general_difficult: 30  # 初始难度值
+  - general_difficult: 60  # 初始难度值
   - threshold: 0.0        # 权重阈值
 
 functions:
@@ -66,7 +101,47 @@ functions:
           """生成指定范围内的随机整数"""
           return random.randint(min_val, max_val)
 
-  generate_matrix:
+  generate_mul_matrix:
     implementation: |
-      def generate_matrix(row, col):
-          return np.mat(np.random.randint(0, 10, size=(row, col)))
+      def generate_mul_matrix(row, col, space=None, leftM=None):
+          if space is not None and leftM is not None:
+              # 精确求解右矩阵，使得 leftM * rightM = space
+              try:
+                  # 使用最小二乘法求解
+                  rightM = np.linalg.lstsq(leftM, space, rcond=None)[0]
+                  return rightM
+              except Exception:
+                  # 备选方案：生成随机矩阵
+                  target_rows = leftM.shape[1]
+                  target_cols = space.shape[1]
+                  return np.mat(np.random.randn(target_rows, target_cols))
+          
+          if space is not None:
+              # 如果只提供了目标矩阵
+              rows, cols = space.shape
+              return np.mat(np.random.randn(rows, cols))
+          
+          if row is not None and col is not None:
+              # 生成指定大小的随机矩阵
+              return np.mat(np.random.randn(row, col))
+          
+          raise ValueError("无法确定矩阵维度")
+
+  generate_add_matrix:
+    implementation: |
+      def generate_add_matrix(row, col, space=None, leftM=None):
+          if space is not None and leftM is not None:
+              # 精确计算右矩阵，使得 leftM + rightM = space
+              rightM = space - leftM
+              return rightM
+          
+          if space is not None:
+              # 如果只提供了目标矩阵
+              rows, cols = space.shape
+              return np.mat(np.random.randn(rows, cols))
+          
+          if row is not None and col is not None:
+              # 生成指定大小的随机矩阵
+              return np.mat(np.random.randn(row, col))
+          
+          raise ValueError("无法确定矩阵维度")

@@ -25,9 +25,9 @@ def process_final_result(executor, weight_map):
         
         # 处理操作符
         if base_symbol in {'*', '+', '(', ')'}:
-            result.append('\n\n')
+            result.append('\n')
             result.append(base_symbol)
-            result.append('\n\n')
+            result.append('\n')
             continue
             
         # 处理矩阵
@@ -279,8 +279,8 @@ def generate_example_dfs(start_symbol, rule_map, nonterminals):
             executor.result.append(current_symbol)
     
     # 处理最终结果的替换
-    print("\n=== Final Weight Map ===")
-    print(weight_map)
+    # print("\n=== Final Weight Map ===")
+    # print(weight_map)
     
     return process_final_result(executor, weight_map)
 
@@ -308,6 +308,7 @@ def execute_action(stmt, weight_map):  # 添加 weight_map 参数
         print(f"\n语法错误:\n语句: {stmt}\n错误: {str(e)}")
 
 if __name__ == "__main__":
+    # executor = DynamicExecutor(grammar_file_address="input/grammar1.yml")
     executor = DynamicExecutor(grammar_file_address="input/grammar2.yml")
     globals().update(executor.namespace)
 
